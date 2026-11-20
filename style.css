@@ -273,3 +273,10 @@ details.beitrag > summary { font-weight: 700; font-size: 17px; }
 .palf label.voll { grid-column: 1 / -1; }
 .palf.lesen { grid-template-columns: 1fr; }
 @media (max-width: 860px) { .palf { grid-template-columns: 1fr; } }
+
+/* Import */
+.dialog.breit { width: min(1000px, calc(100vw - 32px)); }
+.tabelle.import { max-height: 55vh; overflow: auto; }
+.tabelle.import .zeile { grid-template-columns: 28px 1fr 190px 170px; }
+.tabelle.import select { font: inherit; font-size: 14px; padding: 4px; width: 100%; }
+@media (max-width: 860px) { .tabelle.import .zeile { grid-template-columns: 28px 1fr; } }

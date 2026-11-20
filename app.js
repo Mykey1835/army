@@ -358,6 +358,7 @@ async function zeigeDienste() {
         h('button', { class: 'btn light klein', onclick: async () => {
           await db(sb.from('dienste').update({ freigeschaltet_bis: d.freigeschaltet_bis >= heute() ? null : plusTage(heute(), 7) }).eq('id', d.id));
           await laden(); zeigeDienste(); } }, d.freigeschaltet_bis >= heute() ? 'Freischaltung aufheben' : 'Freischalten (7 Tage)'),
+        h('button', { class: 'btn light klein', onclick: () => terminlisteImport(d) }, 'Terminliste importieren'),
         st === 'geplant' ? h('button', { class: 'btn light klein', onclick: () => dienstFormular(d, teil) }, 'Bearbeiten') : h('span', { class: 'klein' }, 'Ändern unter Einstellungen')));
   }));
   app.replaceChildren(seite('Dienste', 'Dienst, KVK, URE, URB', abschnitt(null,
@@ -605,7 +606,8 @@ async function zeigeEinstellungen() {
       h('option', { value: '' }, '–'), ...funktionen.filter(f => f.typ !== 'Ordonnanz').map(f => h('option', { selected: f.code === m.ober_funktion }, f.code)));
     return h('div', { class: 'zeile' + (m.aktiv ? '' : ' fertig') },
       h('div', { class: 'was' }, h('strong', {}, m.name || m.email), h('span', { class: 'klein' }, m.email + (m.user_id ? ' · Konto ✓' : ' · noch kein Konto'))),
-      h('div', {}, fs), h('div', {}, ob),
+      m.user_id === ich.user_id ? h('div', {}, `${m.funktion} (eigene Funktion)`) : h('div', {}, fs),
+      m.user_id === ich.user_id ? h('div', {}) : h('div', {}, ob),
       h('div', { class: 'knoepfe' }, m.user_id === ich.user_id ? null : h('button', { class: 'btn light klein', onclick: async () => {
         await db(sb.from('mitglieder').update({ aktiv: !m.aktiv }).eq('email', m.email)); await laden(); zeigeEinstellungen(); } }, m.aktiv ? 'Sperren' : 'Freigeben')));
   });
