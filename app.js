@@ -8,7 +8,6 @@ let sb = null;
 let ich = null;          // eigenes Mitglied
 let kdt = false, ordonnanz = false;
 let funktionen = [], dienste = [], mitglieder = [];
-let online = new Set();
 let auswahl = { dienst: null, funktion: '' };
 
 // ---------- kleine Helfer ----------
@@ -25,7 +24,8 @@ function h(tag, attrs, ...kinder) {
   return el;
 }
 const iso = d => d.toISOString().slice(0, 10);
-const heute = () => iso(new Date());
+const heute = () => new Date().toLocaleDateString('sv-SE'); // Ortszeit, JJJJ-MM-TT
+const istOnline = m => m.zuletzt_online && Date.now() - new Date(m.zuletzt_online).getTime() < 6 * 60 * 1000;
 function plusTage(s, n) { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return iso(d); }
 function datumCH(s) { if (!s) return '–'; const [j, m, t] = s.split('-'); return `${t}.${m}.${j}`; }
 function meldung(text, art) {
@@ -70,6 +70,9 @@ if (!cfg.url || !cfg.key) {
   }, 0));
 }
 window.addEventListener('hashchange', () => ich && zeige());
+document.querySelector('.menu-btn').addEventListener('click', e => {
+  const o = nav.classList.toggle('open'); e.currentTarget.setAttribute('aria-expanded', o);
+});
 
 function seite(titel, untertitel, ...inhalt) {
   return h('div', {}, h('div', { class: 'pagehead' }, h('div', { class: 'wrap' }, h('h1', {}, titel), untertitel ? h('p', {}, untertitel) : null)), ...inhalt);
@@ -129,8 +132,8 @@ async function anmelden() {
   }
   [kdt, ordonnanz] = await Promise.all([db(sb.rpc('ist_kdt')), db(sb.rpc('ist_ordonnanz'))]);
   sb.rpc('ping');
+  if (!window.__ping) window.__ping = setInterval(() => sb.rpc('ping'), 2 * 60 * 1000);
   await laden();
-  praesenz();
   baueMenue();
   zeige();
 }
@@ -146,15 +149,6 @@ async function laden() {
     const naechster = dienste.find(d => d.ende >= t);
     auswahl.dienst = (laufend[0] || naechster || dienste[dienste.length - 1] || {}).id || null;
   }
-}
-
-function praesenz() {
-  const kanal = sb.channel('online', { config: { presence: { key: ich.user_id } } });
-  kanal.on('presence', { event: 'sync' }, () => {
-    online = new Set(Object.keys(kanal.presenceState()));
-    if (location.hash === '#organigramm') zeige();
-  }).subscribe(async s => { if (s === 'SUBSCRIBED') await kanal.track({ da: true }); });
-  setInterval(() => sb.rpc('ping'), 5 * 60 * 1000);
 }
 
 function baueMenue() {
@@ -280,7 +274,7 @@ function todoFormular(x) {
   x = x || {};
   const gesperrt = x.gesperrt && !kdt;
   const f = {
-    was: h('input', { value: x.was || '', required: true, maxlength: 500 }),
+    was: h('input', { value: x.was || '', required: true, maxlength: 500, disabled: gesperrt }),
     funktion: h('select', { disabled: !kdt }, ...funktionen.filter(z => z.typ !== 'Ordonnanz').map(z =>
       h('option', { value: z.code, selected: z.code === (x.funktion || (kdt ? auswahl.funktion || 'Kdt' : ich.funktion)) }, z.code))),
     art: h('select', { disabled: gesperrt }, h('option', { value: 'kein' }, 'noch kein Termin'), h('option', { value: 'datum', selected: !!x.datum && !x.anker }, 'Datum'), h('option', { value: 'relativ', selected: !!x.anker }, 'relativ zum Dienst')),
@@ -288,10 +282,10 @@ function todoFormular(x) {
     tage: h('input', { type: 'number', min: 0, max: 400, value: x.anker ? Math.abs(x.tage) : '', disabled: gesperrt }),
     rel: h('select', { disabled: gesperrt }, ...[['-Beginn', 'Tage vor Beginn'], ['+Beginn', 'Tage nach Beginn'], ['-Ende', 'Tage vor Ende'], ['+Ende', 'Tage nach Ende']].map(([v, t]) =>
       h('option', { value: v, selected: x.anker && v === (x.tage < 0 ? '-' : '+') + x.anker }, t))),
-    grundlage: h('input', { value: x.grundlage || '' }), an_wen: h('input', { value: x.an_wen || '' }),
-    wie: h('select', {}, ...['', 'schriftlich', 'mündlich'].map(v => h('option', { value: v, selected: v === (x.wie || '') }, v || '–'))),
-    ueber: h('input', { type: 'checkbox', checked: !!x.dienstuebergreifend }),
-    gesperrt: h('input', { type: 'checkbox', checked: !!x.gesperrt }),
+    grundlage: h('input', { value: x.grundlage || '', disabled: gesperrt }), an_wen: h('input', { value: x.an_wen || '', disabled: gesperrt }),
+    wie: h('select', { disabled: gesperrt }, ...['', 'schriftlich', 'mündlich'].map(v => h('option', { value: v, selected: v === (x.wie || '') }, v || '–'))),
+    ueber: h('input', { type: 'checkbox', checked: !!x.dienstuebergreifend, disabled: gesperrt }),
+    gesperrt: h('input', { type: 'checkbox', checked: x.id ? !!x.gesperrt : true }),
     notiz: h('textarea', { maxlength: 1000 }, x.notiz || ''),
   };
   const dialog = h('dialog', { class: 'dialog' });
@@ -299,26 +293,24 @@ function todoFormular(x) {
     e.preventDefault();
     const daten = { was: f.was.value.trim(), grundlage: f.grundlage.value.trim() || null, an_wen: f.an_wen.value.trim() || null,
       wie: f.wie.value || null, dienstuebergreifend: f.ueber.checked, notiz: f.notiz.value.trim() || null };
-    if (kdt) daten.funktion = f.funktion.value;
+    if (kdt) { daten.funktion = f.funktion.value; daten.gesperrt = f.gesperrt.checked; }
     if (!gesperrt) {
       if (f.art.value === 'relativ') { const v = f.rel.value; daten.anker = v.slice(1); daten.tage = (v[0] === '-' ? -1 : 1) * (parseInt(f.tage.value, 10) || 0); daten.datum = null; }
       else { daten.anker = null; daten.tage = null; daten.datum = f.art.value === 'datum' ? f.datum.value || null : null; }
     }
-    if (x.id) {
-      await db(sb.from('todos').update(daten).eq('id', x.id));
-      if (kdt && !f.gesperrt.checked) await db(sb.from('todos').update({ gesperrt: false }).eq('id', x.id));
-    } else {
+    if (gesperrt) { for (const k of Object.keys(daten)) if (k !== 'notiz') delete daten[k]; }
+    if (x.id) await db(sb.from('todos').update(daten).eq('id', x.id));
+    else {
       daten.dienst_id = auswahl.dienst;
       if (!kdt) daten.funktion = ich.funktion;
-      const neu = await db(sb.from('todos').insert(daten).select().single());
-      if (kdt && !f.gesperrt.checked && neu.gesperrt) await db(sb.from('todos').update({ gesperrt: false }).eq('id', neu.id));
+      await db(sb.from('todos').insert(daten));
     }
     dialog.close(); dialog.remove(); zeigeTermine();
   } },
     h('h3', {}, x.id ? 'To-do bearbeiten' : 'Neues To-do'),
     h('label', {}, 'Was', f.was),
     kdt ? h('label', {}, 'Funktion', f.funktion) : null,
-    gesperrt ? h('p', { class: 'hinweis' }, '🔒 Termin vom Kdt gesetzt – nicht verschiebbar.') : null,
+    gesperrt ? h('p', { class: 'hinweis' }, '🔒 Vom Kdt gesetzt: nur die Notiz ist änderbar.') : null,
     h('label', {}, 'Termin', f.art),
     h('div', { class: 'reihe' }, h('label', {}, 'Datum', f.datum), h('label', {}, 'Tage', f.tage), h('label', {}, 'relativ', f.rel)),
     h('div', { class: 'reihe' }, h('label', {}, 'Grundlage', f.grundlage), h('label', {}, 'an wen', f.an_wen), h('label', {}, 'wie', f.wie)),
@@ -335,10 +327,10 @@ async function zeigeDienste() {
   const teil = await db(sb.from('dienst_teilnehmer').select('*'));
   const liste = h('div', { class: 'tabelle' }, ...dienste.map(d => {
     const st = dienstStatus(d);
-    const anzahl = teil.filter(t => t.dienst_id === d.id).length;
+    const anzahl = d.nur_teilnehmer ? teil.filter(t => t.dienst_id === d.id).length : 0;
     return h('div', { class: 'zeile' },
       h('div', { class: 'datum' }, `${datumCH(d.beginn)} – ${datumCH(d.ende)}`),
-      h('div', { class: 'was' }, h('strong', {}, `${d.titel} (${d.art})`), h('span', { class: 'klein' }, anzahl ? `${anzahl} Teilnehmer` : 'alle Mitglieder')),
+      h('div', { class: 'was' }, h('strong', {}, `${d.titel} (${d.art})`), h('span', { class: 'klein' }, d.nur_teilnehmer ? `nur ${anzahl} Teilnehmer` : 'alle Mitglieder')),
       h('div', { class: 'status s-' + (st === 'geplant' ? 'offen' : 'erledigt') }, st === 'geplant' ? `geplant, öffnet ${datumCH(plusTage(d.beginn, -7))}` : st),
       h('div', { class: 'knoepfe' },
         h('button', { class: 'btn light klein', onclick: async () => {
@@ -360,6 +352,7 @@ function dienstFormular(d, teil) {
     ende: h('input', { type: 'date', value: d.ende || '', required: true }),
   };
   const gewaehlt = new Set(teil.filter(t => t.dienst_id === d.id).map(t => t.email));
+  const nur = h('input', { type: 'checkbox', checked: !!d.nur_teilnehmer });
   const haken = mitglieder.filter(m => m.aktiv).map(m => h('input', { type: 'checkbox', value: m.email, checked: gewaehlt.has(m.email) }));
   const dialog = h('dialog', { class: 'dialog' });
   dialog.append(h('form', { class: 'formular', onsubmit: async e => {
@@ -368,15 +361,13 @@ function dienstFormular(d, teil) {
     const daten = { art: f.art.value, titel: f.titel.value.trim(), beginn: f.beginn.value, ende: f.ende.value };
     const gespeichert = d.id ? await db(sb.from('dienste').update(daten).eq('id', d.id).select().single())
                              : await db(sb.from('dienste').insert(daten).select().single());
-    await db(sb.from('dienst_teilnehmer').delete().eq('dienst_id', gespeichert.id));
-    const neu = haken.filter(c => c.checked).map(c => ({ dienst_id: gespeichert.id, email: c.value }));
-    if (neu.length) await db(sb.from('dienst_teilnehmer').insert(neu));
+    await db(sb.rpc('teilnehmer_setzen', { d_id: gespeichert.id, nur: nur.checked, adressen: haken.filter(c => c.checked).map(c => c.value) }));
     dialog.close(); dialog.remove(); auswahl.dienst = gespeichert.id; await laden(); zeige();
   } },
     h('h3', {}, d.id ? 'Dienst bearbeiten' : 'Neuer Dienst'),
     h('div', { class: 'reihe' }, h('label', {}, 'Art', f.art), h('label', {}, 'Titel', f.titel)),
     h('div', { class: 'reihe' }, h('label', {}, 'Beginn', f.beginn), h('label', {}, 'Ende', f.ende)),
-    h('p', { class: 'klein' }, 'Teilnehmer (keiner angehakt = alle Mitglieder):'),
+    h('label', { class: 'haken' }, nur, 'Nur für ausgewählte Teilnehmer (sonst alle Mitglieder)'),
     h('div', { class: 'haken-liste' }, ...haken.map((c, i) => h('label', { class: 'haken' }, c, mitglieder.filter(m => m.aktiv)[i].name || c.value))),
     h('div', { class: 'knoepfe' }, h('button', { class: 'btn', type: 'submit' }, 'Speichern'),
       h('button', { class: 'btn light', type: 'button', onclick: () => { dialog.close(); dialog.remove(); } }, 'Abbrechen'))));
@@ -385,6 +376,7 @@ function dienstFormular(d, teil) {
 
 // ---------- Organigramm (Kdt) ----------
 async function zeigeOrganigramm() {
+  await laden(); // frische Online-Zeiten
   const todos = auswahl.dienst ? await db(sb.from('todos').select('funktion,status,datum').eq('dienst_id', auswahl.dienst)) : [];
   const t = heute();
   const d = dienste.find(x => x.id === auswahl.dienst);
@@ -397,8 +389,8 @@ async function zeigeOrganigramm() {
     return h('div', { class: 'card org' },
       h('h3', {}, f.code),
       leute.length ? h('ul', { class: 'leute' }, ...leute.map(m => h('li', {},
-        h('span', { class: 'punkt' + (online.has(m.user_id) ? ' an' : '') }), (m.name || m.email) + (m.funktion !== f.code ? ' (Ordonnanz)' : ''),
-        h('span', { class: 'klein' }, online.has(m.user_id) ? ' online' : m.user_id ? (m.zuletzt_online ? ' zuletzt ' + new Date(m.zuletzt_online).toLocaleString('de-CH', { dateStyle: 'short', timeStyle: 'short' }) : ' noch nie online') : ' eingeladen, kein Konto'))))
+        h('span', { class: 'punkt' + (istOnline(m) ? ' an' : '') }), (m.name || m.email) + (m.funktion !== f.code ? ' (Ordonnanz)' : ''),
+        h('span', { class: 'klein' }, istOnline(m) ? ' online' : m.user_id ? (m.zuletzt_online ? ' zuletzt ' + new Date(m.zuletzt_online).toLocaleString('de-CH', { dateStyle: 'short', timeStyle: 'short' }) : ' noch nie online') : ' eingeladen, kein Konto'))))
         : h('p', { class: 'klein' }, 'nicht besetzt'),
       h('p', {}, `${offen} offen · ${vorb} vorbereitet` + (spaet ? ` · ${spaet} überfällig` : '')),
       h('a', { class: 'btn light klein', href: '#termine', onclick: () => { auswahl.funktion = f.code; } }, 'Pendenzen'));
@@ -412,7 +404,7 @@ async function zeigeEinstellungen() {
     funktion: h('select', {}, ...funktionen.map(f => h('option', {}, f.code))),
     ober: h('select', {}, h('option', { value: '' }, '–'), ...funktionen.filter(f => f.typ !== 'Ordonnanz').map(f => h('option', {}, f.code))) };
   const zeilen = mitglieder.map(m => {
-    const fs = h('select', { onchange: async e => { await db(sb.from('mitglieder').update({ funktion: e.target.value }).eq('email', m.email)); await laden(); } },
+    const fs = h('select', { disabled: m.user_id === ich.user_id, onchange: async e => { await db(sb.from('mitglieder').update({ funktion: e.target.value }).eq('email', m.email)); await laden(); } },
       ...funktionen.map(f => h('option', { selected: f.code === m.funktion }, f.code)));
     const ob = h('select', { onchange: async e => { await db(sb.from('mitglieder').update({ ober_funktion: e.target.value || null }).eq('email', m.email)); await laden(); } },
       h('option', { value: '' }, '–'), ...funktionen.filter(f => f.typ !== 'Ordonnanz').map(f => h('option', { selected: f.code === m.ober_funktion }, f.code)));

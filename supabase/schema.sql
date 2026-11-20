@@ -1,6 +1,6 @@
 -- Army-Plattform: Datenbank und Rechte
 -- Einmal ausführen: Supabase → SQL Editor → alles einfügen → Run.
--- Vorher in der letzten Zeile DEINE Militär-Mailadresse eintragen (klein geschrieben).
+-- Danach den ersten Kdt separat eintragen (Anleitung README, Adresse nie ins Repository).
 
 -- Funktionen (Stellen). Mehrere Zugführer: weitere Codes wie «Zfhr 2» anlegen.
 create table public.funktionen (
@@ -18,7 +18,7 @@ create table public.mitglieder (
   name text,
   funktion text not null references public.funktionen(code) on update cascade,
   ober_funktion text references public.funktionen(code) on update cascade, -- nur Ordonnanz
-  user_id uuid unique,
+  user_id uuid unique references auth.users(id) on delete set null,
   zuletzt_online timestamptz,
   aktiv boolean not null default true
 );
@@ -30,10 +30,11 @@ create table public.dienste (
   beginn date not null,
   ende date not null check (ende >= beginn),
   freigeschaltet_bis date, -- Haken «freischalten»: offen bis zu diesem Tag
+  nur_teilnehmer boolean not null default false, -- true: nur eingetragene Teilnehmer sehen den Dienst
   erstellt timestamptz not null default now()
 );
 
--- Teilnehmer: leer = alle Mitglieder; sonst nur die eingetragenen.
+-- Teilnehmer (gilt nur, wenn dienste.nur_teilnehmer = true)
 create table public.dienst_teilnehmer (
   dienst_id uuid references public.dienste(id) on delete cascade,
   email text references public.mitglieder(email) on update cascade on delete cascade,
@@ -92,9 +93,10 @@ language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from public.dienste d
     where d.id = d_id
+      and exists (select 1 from public.mitglieder m where m.user_id = auth.uid() and m.aktiv)
       and (current_date between d.beginn - 7 and d.ende + 14
            or coalesce(d.freigeschaltet_bis, date '1900-01-01') >= current_date)
-      and (not exists (select 1 from public.dienst_teilnehmer t where t.dienst_id = d.id)
+      and (not d.nur_teilnehmer
            or exists (select 1 from public.dienst_teilnehmer t join public.mitglieder m on m.email = t.email
                       where t.dienst_id = d.id and m.user_id = auth.uid())))
 $$;
@@ -128,33 +130,33 @@ $$;
 -- To-do-Regeln: relativer Termin, Sperre, Ordonnanz
 create function public.todo_regeln() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare d public.dienste; kdt boolean := public.ist_kdt();
+declare d public.dienste; kdt boolean := public.ist_kdt(); o jsonb; n jsonb;
 begin
   if tg_op = 'UPDATE' and not kdt then
-    if new.dienst_id <> old.dienst_id or new.funktion <> old.funktion or new.gesperrt <> old.gesperrt
-       or new.erstellt_von is distinct from old.erstellt_von then
-      raise exception 'Nur der Kdt darf Dienst, Funktion oder Sperre ändern.';
-    end if;
-    if old.gesperrt and (new.datum is distinct from old.datum or new.anker is distinct from old.anker
-                         or new.tage is distinct from old.tage) then
-      raise exception 'Dieser Termin ist vom Kdt gesetzt und nicht verschiebbar.';
-    end if;
-    if public.ist_ordonnanz() and new.status <> old.status and new.status not in ('offen','vorbereitet') then
-      raise exception 'Ordonnanz kann nur «vorbereitet» melden.';
+    o := to_jsonb(old) - 'geaendert' - 'geaendert_von';
+    n := to_jsonb(new) - 'geaendert' - 'geaendert_von';
+    if public.ist_ordonnanz() then
+      -- Ordonnanz: nur offen ↔ vorbereitet, sonst nichts
+      if (n - 'status') <> (o - 'status')
+         or not ((old.status, new.status) in (('offen','vorbereitet'), ('vorbereitet','offen'))) then
+        raise exception 'Ordonnanz kann nur «vorbereitet» melden oder zurücknehmen.';
+      end if;
+    elsif old.gesperrt then
+      -- Vom Kdt gesetztes To-do: Funktion meldet nur Status und Notiz
+      if (n - 'status' - 'notiz') <> (o - 'status' - 'notiz') then
+        raise exception 'Dieses To-do ist vom Kdt gesetzt: nur Status und Notiz änderbar.';
+      end if;
+    else
+      if n->'dienst_id' <> o->'dienst_id' or n->'funktion' <> o->'funktion' or n->'gesperrt' <> o->'gesperrt'
+         or n->'erstellt_von' <> o->'erstellt_von' or n->'erstellt' <> o->'erstellt' then
+        raise exception 'Nur der Kdt darf Dienst, Funktion oder Sperre ändern.';
+      end if;
     end if;
   end if;
   if tg_op = 'INSERT' and not kdt then
     new.gesperrt := false;
+    new.status := 'offen';
     new.erstellt_von := auth.uid();
-    if public.ist_ordonnanz() then
-      new.status := 'offen';
-    end if;
-  end if;
-  -- Der Kdt setzt einen Termin → gesperrt (nicht bei automatischem Neurechnen oder Übernehmen)
-  if kdt and pg_trigger_depth() = 1 and (new.datum is not null or new.anker is not null) and
-     (tg_op = 'INSERT' or new.datum is distinct from old.datum or new.anker is distinct from old.anker
-      or new.tage is distinct from old.tage) then
-    new.gesperrt := true;
   end if;
   if new.anker is not null then
     if new.tage is null then new.tage := 0; end if;
@@ -199,6 +201,17 @@ end $$;
 create trigger dienst_uebernehmen after insert on public.dienste
   for each row execute function public.dienst_uebernehmen();
 
+-- Teilnehmer eines Dienstes in einem Schritt setzen (nur Kdt)
+create function public.teilnehmer_setzen(d_id uuid, nur boolean, adressen text[]) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.ist_kdt() then raise exception 'Nur der Kdt.'; end if;
+  update public.dienste set nur_teilnehmer = nur where id = d_id;
+  delete from public.dienst_teilnehmer where dienst_id = d_id;
+  insert into public.dienst_teilnehmer (dienst_id, email)
+    select d_id, a from unnest(coalesce(adressen, '{}')) a where nur;
+end $$;
+
 -- Rechte (Row Level Security)
 alter table public.funktionen enable row level security;
 alter table public.mitglieder enable row level security;
@@ -228,11 +241,12 @@ create policy aendern on public.todos for update to authenticated
   with check (public.ist_kdt() or (funktion = public.meine_funktion() and public.dienst_sichtbar(dienst_id)));
 create policy loeschen on public.todos for delete to authenticated using (public.ist_kdt());
 
-revoke all on all tables in schema public from anon;
-revoke execute on all functions in schema public from anon, public;
+-- Zugriffe ausdrücklich: anon nichts, authenticated nur lesen/schreiben (RLS entscheidet)
+revoke all on all tables in schema public from anon, authenticated;
+grant select, insert, update, delete on public.funktionen, public.mitglieder, public.dienste,
+  public.dienst_teilnehmer, public.todos to authenticated;
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+revoke execute on all functions in schema public from anon, authenticated, public;
 grant execute on function public.ich(), public.ist_kdt(), public.ist_ordonnanz(), public.meine_funktion(),
-  public.dienst_sichtbar(uuid), public.ping() to authenticated;
+  public.dienst_sichtbar(uuid), public.ping(), public.teilnehmer_setzen(uuid, boolean, text[]) to authenticated;
 grant execute on function public.konto_pruefen(), public.konto_verbinden() to supabase_auth_admin;
-
--- Erster Kdt (DEINE Militär-Mailadresse, klein geschrieben):
-insert into public.mitglieder (email, funktion) values ('deine.adresse@beispiel.ch', 'Kdt');

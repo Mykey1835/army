@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; base-uri 'none'; form-action 'self'">
 <title>Army – Mike Sokol</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -22,11 +23,7 @@
     <span><a href="https://mikesokol.ch">mikesokol.ch</a> · Kein Tracking</span>
   </div>
 </footer>
-<script>
-  var b = document.querySelector('.menu-btn'), t = document.getElementById('tabs');
-  b.addEventListener('click', function () { var o = t.classList.toggle('open'); b.setAttribute('aria-expanded', o); });
-</script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="vendor/supabase-2.45.4.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>
