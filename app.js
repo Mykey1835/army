@@ -6,7 +6,8 @@ const app = document.getElementById('app');
 const nav = document.getElementById('tabs');
 let sb = null;
 let ich = null;          // eigenes Mitglied
-let kdt = false, ordonnanz = false;
+let kdt = false, ordonnanz = false, protokoll = false;
+const WAPPEN = [{ datei: 'ristl-62.png', name: 'Ristl Schulen 62' }];
 let funktionen = [], dienste = [], mitglieder = [];
 let auswahl = { dienst: null, funktion: '' };
 
@@ -130,7 +131,7 @@ async function anmelden() {
       h('button', { class: 'btn', onclick: () => sb.auth.signOut() }, 'Abmelden'))));
     return;
   }
-  [kdt, ordonnanz] = await Promise.all([db(sb.rpc('ist_kdt')), db(sb.rpc('ist_ordonnanz'))]);
+  [kdt, ordonnanz, protokoll] = await Promise.all([db(sb.rpc('ist_kdt')), db(sb.rpc('ist_ordonnanz')), db(sb.rpc('ist_protokoll'))]);
   sb.rpc('ping');
   if (!window.__ping) window.__ping = setInterval(() => sb.rpc('ping'), 2 * 60 * 1000);
   await laden();
@@ -152,7 +153,7 @@ async function laden() {
 }
 
 function baueMenue() {
-  const reiter = [['start', 'Start'], ['termine', 'Terminliste']];
+  const reiter = [['start', 'Start'], ['termine', 'Terminliste'], ['rapporte', 'Rapporte']];
   if (kdt) reiter.push(['dienste', 'Dienste'], ['organigramm', 'Organigramm'], ['einstellungen', 'Einstellungen']);
   nav.replaceChildren(...reiter.map(([id, t]) => h('li', {}, h('a', { href: '#' + id }, t))),
     h('li', {}, h('a', { href: '#', onclick: e => { e.preventDefault(); sb.auth.signOut(); } }, 'Abmelden')));
@@ -162,14 +163,30 @@ function zeige() {
   const seiteId = (location.hash || '#start').slice(1);
   for (const a of nav.querySelectorAll('a')) a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + seiteId);
   nav.classList.remove('open');
+  zeigeWappen();
   const nurKdt = ['dienste', 'organigramm', 'einstellungen'];
   if (nurKdt.includes(seiteId) && !kdt) { location.hash = '#start'; return; }
-  ({ start: zeigeStart, termine: zeigeTermine, dienste: zeigeDienste, organigramm: zeigeOrganigramm, einstellungen: zeigeEinstellungen }[seiteId] || zeigeStart)();
+  ({ start: zeigeStart, termine: zeigeTermine, rapporte: zeigeRapporte, dienste: zeigeDienste, organigramm: zeigeOrganigramm, einstellungen: zeigeEinstellungen }[seiteId] || zeigeStart)();
+}
+
+function meineFunktion() { return kdt ? 'Kdt' : (ordonnanz ? ich.ober_funktion : ich.funktion); }
+function zeigeWappen() {
+  const d = dienste.find(x => x.id === auswahl.dienst);
+  const img = document.getElementById('wappen'), icon = document.getElementById('favicon');
+  if (d && d.wappen) { img.src = 'wappen/' + d.wappen; img.hidden = false; icon.href = 'wappen/' + d.wappen; }
+  else { img.hidden = true; img.removeAttribute('src'); icon.href = 'data:,'; }
+}
+function dienstWahl(neuZeigen) {
+  const kopf = h('div', { class: 'filter' });
+  const dWahl = h('select', { onchange: () => { auswahl.dienst = dWahl.value; zeigeWappen(); neuZeigen(); } },
+    ...dienste.map(d => h('option', { value: d.id, selected: d.id === auswahl.dienst }, `${d.titel} (${d.art}, ${datumCH(d.beginn)})`)));
+  kopf.append(h('label', {}, 'Dienst', dienste.length ? dWahl : h('span', {}, ' – kein Dienst offen')));
+  return kopf;
 }
 
 // ---------- Start: Anleitung ----------
 async function zeigeStart() {
-  const meine = kdt ? 'Kdt' : (ordonnanz ? ich.ober_funktion : ich.funktion);
+  const meine = meineFunktion();
   let offen = 0;
   if (auswahl.dienst) {
     const { count } = await sb.from('todos').select('id', { count: 'exact', head: true })
@@ -204,21 +221,20 @@ function anleitung() {
   if (ordonnanz) return [
     ['1', 'Terminliste öffnen', `Du siehst die Pendenzen der Funktion ${ich.ober_funktion}.`],
     ['2', 'Vorbereiten', 'Erledige die Vorarbeit und drücke «Vorbereitet melden».'],
-    ['3', 'Funktion schliesst ab', 'Die Funktion prüft und hakt ab oder gibt mit Notiz zurück.']];
+    ['3', 'Funktion schliesst ab', 'Die Funktion prüft und hakt ab oder gibt mit Notiz zurück.'],
+    ['4', 'Rapporte', protokoll ? 'Unter «Rapporte» führst du die Mitschrift: Punkte jeder Funktion und Abmachungen erfassen, am Schluss abschliessen.' : `Unter «Rapporte» kannst du die Punkte für ${ich.ober_funktion} vorbereiten.`]];
   const a = [
     ['1', 'Terminliste öffnen', 'Oben den Dienst wählen. Zuoberst steht, was noch keinen Termin hat.'],
     ['2', 'Pendenzen erfassen', 'Eigene To-dos mit Datum oder relativ zum Dienst («3 Tage vor Beginn»). Haken «dienstübergreifend»: kommt im nächsten Dienst für deine Funktion wieder.'],
-    ['3', 'Melden', '«Erledigt (x)» oder «Nichts zu melden (n)». Meldet deine Ordonnanz «vorbereitet», prüfst du und schliesst ab.']];
-  if (kdt) a.push(['4', 'Führen', 'Unter «Dienste» Dienste anlegen und freischalten, unter «Organigramm» sehen, wer online ist und wer was offen hat, unter «Einstellungen» Leute einladen.']);
+    ['3', 'Melden', '«Erledigt (x)» oder «Nichts zu melden (n)». Meldet deine Ordonnanz «vorbereitet», prüfst du und schliesst ab.'],
+    ['4', 'Rapporte', 'Unter «Rapporte» trägst du vor dem DR oder KR deine Punkte im eigenen Feld ein. Abmachungen landen automatisch in deiner Terminliste; offene kommen am nächsten Rapport wieder.']];
+  if (kdt) a.push(['5', 'Führen', 'Unter «Dienste» Dienste anlegen und freischalten, unter «Organigramm» sehen, wer online ist und wer was offen hat, unter «Einstellungen» Leute einladen.']);
   return a;
 }
 
 // ---------- Terminliste ----------
 async function zeigeTermine() {
-  const kopf = h('div', { class: 'filter' });
-  const dWahl = h('select', { onchange: () => { auswahl.dienst = dWahl.value; zeigeTermine(); } },
-    ...dienste.map(d => h('option', { value: d.id, selected: d.id === auswahl.dienst }, `${d.titel} (${d.art}, ${datumCH(d.beginn)})`)));
-  kopf.append(h('label', {}, 'Dienst', dienste.length ? dWahl : h('span', {}, ' – kein Dienst offen')));
+  const kopf = dienstWahl(zeigeTermine);
   if (kdt) kopf.append(h('label', {}, 'Funktion', h('select', { onchange: e => { auswahl.funktion = e.target.value; zeigeTermine(); } },
     h('option', { value: '' }, 'alle'), ...funktionen.filter(f => f.typ !== 'Ordonnanz').map(f => h('option', { value: f.code, selected: f.code === auswahl.funktion }, f.code)))));
   const inhalt = h('div', {});
@@ -226,6 +242,7 @@ async function zeigeTermine() {
   if (!auswahl.dienst) return;
   let abfrage = sb.from('todos').select('*').eq('dienst_id', auswahl.dienst).order('datum', { nullsFirst: true }).order('erstellt');
   if (kdt && auswahl.funktion) abfrage = abfrage.eq('funktion', auswahl.funktion);
+  if (!kdt) abfrage = abfrage.eq('funktion', meineFunktion()); // Abmachungen anderer stehen nur im Rapport
   const todos = await db(abfrage);
   const ohne = todos.filter(t => !t.datum), mit = todos.filter(t => t.datum);
   if (!ordonnanz) inhalt.append(h('button', { class: 'btn', onclick: () => todoFormular() }, '+ Neues To-do'));
@@ -242,7 +259,7 @@ function tabelle(todos) {
       h('div', { class: 'datum' }, x.gesperrt ? '🔒 ' : '', datumCH(x.datum),
         x.anker ? h('span', { class: 'klein' }, ` ${Math.abs(x.tage)} T ${x.tage < 0 ? 'vor' : 'nach'} ${x.anker}`) : null),
       h('div', { class: 'was' }, h('strong', {}, x.was),
-        h('span', { class: 'klein' }, [kdt ? x.funktion : null, x.grundlage, x.an_wen ? 'an ' + x.an_wen : null, x.wie, x.dienstuebergreifend ? 'dienstübergreifend' : null].filter(Boolean).join(' · ')),
+        h('span', { class: 'klein' }, [kdt ? x.funktion : null, x.grundlage, x.an_wen ? 'an ' + x.an_wen : null, x.wie, x.dienstuebergreifend ? 'dienstübergreifend' : null, x.rapport_id ? 'Abmachung aus Rapport' : null].filter(Boolean).join(' · ')),
         x.notiz ? h('span', { class: 'notiz' }, 'Notiz: ' + x.notiz) : null),
       h('div', { class: 'status s-' + x.status }, x.status === 'vorbereitet' ? 'vorbereitet von Ordonnanz' : STATUS[x.status]),
       h('div', { class: 'knoepfe' }, ...aktionen(x)));
@@ -350,6 +367,7 @@ function dienstFormular(d, teil) {
     titel: h('input', { value: d.titel || '', required: true, placeholder: 'z. B. WK 2027' }),
     beginn: h('input', { type: 'date', value: d.beginn || '', required: true }),
     ende: h('input', { type: 'date', value: d.ende || '', required: true }),
+    wappen: h('select', {}, h('option', { value: '' }, 'kein Wappen'), ...WAPPEN.map(w => h('option', { value: w.datei, selected: w.datei === d.wappen }, w.name))),
   };
   const gewaehlt = new Set(teil.filter(t => t.dienst_id === d.id).map(t => t.email));
   const nur = h('input', { type: 'checkbox', checked: !!d.nur_teilnehmer });
@@ -358,7 +376,7 @@ function dienstFormular(d, teil) {
   dialog.append(h('form', { class: 'formular', onsubmit: async e => {
     e.preventDefault();
     if (f.ende.value < f.beginn.value) return meldung('Ende liegt vor Beginn.', 'fehler');
-    const daten = { art: f.art.value, titel: f.titel.value.trim(), beginn: f.beginn.value, ende: f.ende.value, nur_teilnehmer: nur.checked };
+    const daten = { art: f.art.value, titel: f.titel.value.trim(), beginn: f.beginn.value, ende: f.ende.value, nur_teilnehmer: nur.checked, wappen: f.wappen.value || null };
     const gespeichert = d.id ? await db(sb.from('dienste').update(daten).eq('id', d.id).select().single())
                              : await db(sb.from('dienste').insert(daten).select().single());
     await db(sb.rpc('teilnehmer_setzen', { d_id: gespeichert.id, nur: nur.checked, adressen: haken.filter(c => c.checked).map(c => c.value) }));
@@ -366,7 +384,7 @@ function dienstFormular(d, teil) {
   } },
     h('h3', {}, d.id ? 'Dienst bearbeiten' : 'Neuer Dienst'),
     h('div', { class: 'reihe' }, h('label', {}, 'Art', f.art), h('label', {}, 'Titel', f.titel)),
-    h('div', { class: 'reihe' }, h('label', {}, 'Beginn', f.beginn), h('label', {}, 'Ende', f.ende)),
+    h('div', { class: 'reihe' }, h('label', {}, 'Beginn', f.beginn), h('label', {}, 'Ende', f.ende), h('label', {}, 'Wappen', f.wappen)),
     h('label', { class: 'haken' }, nur, 'Nur für ausgewählte Teilnehmer (sonst alle Mitglieder)'),
     h('div', { class: 'haken-liste' }, ...haken.map((c, i) => h('label', { class: 'haken' }, c, mitglieder.filter(m => m.aktiv)[i].name || c.value))),
     h('div', { class: 'knoepfe' }, h('button', { class: 'btn', type: 'submit' }, 'Speichern'),
@@ -375,27 +393,171 @@ function dienstFormular(d, teil) {
 }
 
 // ---------- Organigramm (Kdt) ----------
+const typVon = code => (funktionen.find(f => f.code === code) || {}).typ;
+function personZeile(m) {
+  return h('li', {}, h('span', { class: 'punkt' + (istOnline(m) ? ' an' : '') }), m.name || m.email,
+    h('span', { class: 'klein' }, istOnline(m) ? ' online' : m.user_id ? (m.zuletzt_online ? ' zuletzt ' + new Date(m.zuletzt_online).toLocaleString('de-CH', { dateStyle: 'short', timeStyle: 'short' }) : ' noch nie online') : ' eingeladen, kein Konto'));
+}
+async function zuteilen(email, ober) {
+  await db(sb.from('mitglieder').update({ ober_funktion: ober || null }).eq('email', email));
+  zeigeOrganigramm();
+}
+function dropZiel(el, ober) {
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('ueber'); });
+  el.addEventListener('dragleave', () => el.classList.remove('ueber'));
+  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('ueber'); const m = e.dataTransfer.getData('text/plain'); if (m) zuteilen(m, ober); });
+  return el;
+}
+function ordonnanzChip(m) {
+  const wahl = h('select', { 'aria-label': 'zuteilen', onchange: e => zuteilen(m.email, e.target.value) },
+    h('option', { value: '' }, '–'), ...funktionen.filter(f => f.typ !== 'Ordonnanz').map(f => h('option', { value: f.code, selected: f.code === m.ober_funktion }, f.code)));
+  return h('div', { class: 'chip', draggable: 'true', title: 'Ziehen, um zuzuteilen', ondragstart: e => e.dataTransfer.setData('text/plain', m.email) },
+    h('span', { class: 'punkt' + (istOnline(m) ? ' an' : '') }), m.name || m.email, wahl);
+}
+function einladenDialog(vorgabe) {
+  const f = { email: h('input', { type: 'email', required: true, placeholder: 'Mailadresse' }), name: h('input', { placeholder: 'Name (freiwillig)' }),
+    funktion: h('select', {}, ...funktionen.map(x => h('option', { selected: x.code === vorgabe.funktion }, x.code))),
+    ober: h('select', {}, h('option', { value: '' }, '–'), ...funktionen.filter(x => x.typ !== 'Ordonnanz').map(x => h('option', { selected: x.code === vorgabe.ober }, x.code))) };
+  const dialog = h('dialog', { class: 'dialog' });
+  dialog.append(h('form', { class: 'formular', onsubmit: async e => {
+    e.preventDefault();
+    await db(sb.from('mitglieder').insert({ email: f.email.value.trim().toLowerCase(), name: f.name.value.trim() || null, funktion: f.funktion.value, ober_funktion: typVon(f.funktion.value) === 'Ordonnanz' ? f.ober.value || null : null }));
+    meldung('Eingeladen. Die Person erstellt ihr Konto selbst unter «Erstes Mal hier?».', 'ok');
+    dialog.close(); dialog.remove(); zeige();
+  } }, h('h3', {}, 'Person einladen'), h('label', {}, 'Mail', f.email), h('label', {}, 'Name', f.name),
+    h('div', { class: 'reihe' }, h('label', {}, 'Funktion', f.funktion), h('label', {}, 'Ordonnanz für', f.ober)),
+    h('p', { class: 'klein' }, 'Die Person öffnet army.mikesokol.ch, wählt «Erstes Mal hier? Konto erstellen» und setzt ihr Passwort.'),
+    h('div', { class: 'knoepfe' }, h('button', { class: 'btn', type: 'submit' }, 'Einladen'),
+      h('button', { class: 'btn light', type: 'button', onclick: () => { dialog.close(); dialog.remove(); } }, 'Abbrechen'))));
+  document.body.append(dialog); dialog.showModal();
+}
 async function zeigeOrganigramm() {
   await laden(); // frische Online-Zeiten
   const todos = auswahl.dienst ? await db(sb.from('todos').select('funktion,status,datum').eq('dienst_id', auswahl.dienst)) : [];
   const t = heute();
   const d = dienste.find(x => x.id === auswahl.dienst);
-  const karten = funktionen.filter(f => f.typ !== 'Ordonnanz').map(f => {
-    const leute = mitglieder.filter(m => m.aktiv && (m.funktion === f.code || m.ober_funktion === f.code));
+  const aktiv = mitglieder.filter(m => m.aktiv);
+  const ordonnanzen = aktiv.filter(m => typVon(m.funktion) === 'Ordonnanz');
+  const knoten = f => {
+    const leute = aktiv.filter(m => m.funktion === f.code);
     const eigene = todos.filter(x => x.funktion === f.code);
     const offen = eigene.filter(x => x.status === 'offen').length;
     const vorb = eigene.filter(x => x.status === 'vorbereitet').length;
     const spaet = eigene.filter(x => x.datum && x.datum < t && (x.status === 'offen' || x.status === 'vorbereitet')).length;
-    return h('div', { class: 'card org' },
+    return dropZiel(h('div', { class: 'knoten' + (f.typ === 'Kdt' ? ' oben' : '') },
       h('h3', {}, f.code),
-      leute.length ? h('ul', { class: 'leute' }, ...leute.map(m => h('li', {},
-        h('span', { class: 'punkt' + (istOnline(m) ? ' an' : '') }), (m.name || m.email) + (m.funktion !== f.code ? ' (Ordonnanz)' : ''),
-        h('span', { class: 'klein' }, istOnline(m) ? ' online' : m.user_id ? (m.zuletzt_online ? ' zuletzt ' + new Date(m.zuletzt_online).toLocaleString('de-CH', { dateStyle: 'short', timeStyle: 'short' }) : ' noch nie online') : ' eingeladen, kein Konto'))))
-        : h('p', { class: 'klein' }, 'nicht besetzt'),
-      h('p', {}, `${offen} offen · ${vorb} vorbereitet` + (spaet ? ` · ${spaet} überfällig` : '')),
-      h('a', { class: 'btn light klein', href: '#termine', onclick: () => { auswahl.funktion = f.code; } }, 'Pendenzen'));
-  });
-  app.replaceChildren(seite('Organigramm', d ? `${d.titel} (${d.art})` : 'kein Dienst gewählt', abschnitt(null, h('div', { class: 'cards' }, ...karten))));
+      leute.length ? h('ul', { class: 'leute' }, ...leute.map(personZeile))
+        : h('button', { class: 'btn light klein', onclick: () => einladenDialog({ funktion: f.code }) }, '+ besetzen'),
+      h('p', { class: 'klein' }, `${offen} offen · ${vorb} vorbereitet` + (spaet ? ` · ${spaet} überfällig` : '')),
+      h('div', { class: 'chips' }, ...ordonnanzen.filter(m => m.ober_funktion === f.code).map(ordonnanzChip)),
+      h('div', { class: 'knoepfe links' },
+        h('button', { class: 'btn light klein', onclick: () => einladenDialog({ funktion: 'Ordonnanz', ober: f.code }) }, '+ Ordonnanz'),
+        h('a', { class: 'btn light klein', href: '#termine', onclick: () => { auswahl.funktion = f.code; } }, 'Pendenzen'))), f.code);
+  };
+  const ebene = (cls, liste) => h('div', { class: 'ebene ' + cls }, ...liste.map(knoten));
+  const ohne = ordonnanzen.filter(m => !m.ober_funktion);
+  app.replaceChildren(seite('Organigramm', d ? `${d.titel} (${d.art})` : 'kein Dienst gewählt', abschnitt(null,
+    h('p', { class: 'klein' }, 'Ordonnanzen auf eine Funktion ziehen (oder im Feld wählen), um sie zuzuteilen.'),
+    h('div', { class: 'baum' },
+      ebene('e1', funktionen.filter(f => f.typ === 'Kdt')),
+      ebene('e2', funktionen.filter(f => f.typ === 'Kdt Stv')),
+      ebene('e3', funktionen.filter(f => !['Kdt', 'Kdt Stv', 'Ordonnanz'].includes(f.typ)))),
+    dropZiel(h('div', { class: 'pool' }, h('h3', {}, `Ordonnanzen ohne Zuteilung (${ohne.length})`),
+      h('div', { class: 'chips' }, ...ohne.map(ordonnanzChip)),
+      h('button', { class: 'btn light klein', onclick: () => einladenDialog({ funktion: 'Ordonnanz' }) }, '+ Ordonnanz einladen')), null))));
+}
+
+// ---------- Rapporte ----------
+const fertig = x => x.status === 'erledigt' || x.status === 'negativ';
+const rapportName = r => `${r.art === 'DR' ? 'Dienstrapport' : 'Kompanierapport'} ${datumCH(r.datum)}${r.zeit ? ', ' + r.zeit : ''}`;
+async function zeigeRapporte() {
+  const inhalt = h('div', {});
+  app.replaceChildren(seite('Rapporte', 'Dienstrapport (DR) und Kompanierapport (KR)', abschnitt(null, dienstWahl(zeigeRapporte), inhalt)));
+  if (!auswahl.dienst) return;
+  const raps = await db(sb.from('rapporte').select('*').eq('dienst_id', auswahl.dienst).order('datum').order('zeit'));
+  const ids = raps.map(r => r.id);
+  const [beitr, abm] = ids.length ? await Promise.all([
+    db(sb.from('rapport_beitraege').select('*').in('rapport_id', ids)),
+    db(sb.from('todos').select('*').in('rapport_id', ids))]) : [[], []];
+  if (protokoll) inhalt.append(h('button', { class: 'btn', onclick: () => rapportFormular() }, '+ Neuer Rapport'));
+  const offen = raps.filter(r => !r.abgeschlossen), alt = raps.filter(r => r.abgeschlossen).reverse();
+  if (!offen.length) inhalt.append(h('p', {}, 'Kein offener Rapport.' + (protokoll ? '' : ' Der Kdt oder seine Ordonnanz eröffnet ihn.')));
+  for (const r of offen) inhalt.append(rapportBlock(r, raps, beitr, abm, true));
+  if (alt.length) inhalt.append(h('details', { class: 'archiv' }, h('summary', {}, `Archiv (${alt.length} Rapporte)`),
+    ...alt.map(r => h('details', { class: 'alt-rapport' }, h('summary', {}, rapportName(r)), rapportBlock(r, raps, beitr, abm, false)))));
+}
+
+function rapportBlock(r, raps, beitr, abm, offen) {
+  const block = h('div', { class: 'rapport' });
+  if (offen) block.append(h('h2', {}, rapportName(r)));
+  // Erwartete Leistung: offene Abmachungen früherer Rapporte gleicher Art, fällig bis heute oder ohne Termin
+  if (offen) {
+    const frueher = new Set(raps.filter(x => x.art === r.art && x.id !== r.id && (x.datum < r.datum || (x.datum === r.datum && (x.zeit || '') < (r.zeit || '')))).map(x => x.id));
+    const pend = abm.filter(a => frueher.has(a.rapport_id) && !fertig(a) && (!a.datum || a.datum <= r.datum));
+    block.append(h('h3', { class: 'zwischen' }, `Pendenzen aus früheren Rapporten (${pend.length})`),
+      pend.length ? h('div', { class: 'tabelle' }, ...pend.map(a => abmZeile(a))) : h('p', { class: 'klein' }, 'Keine.'));
+  }
+  // Beiträge der Funktionen
+  block.append(h('h3', { class: 'zwischen' }, 'Punkte der Funktionen'));
+  const raster = h('div', { class: 'beitraege' });
+  for (const f of funktionen.filter(x => x.typ !== 'Ordonnanz')) {
+    const b = beitr.find(x => x.rapport_id === r.id && x.funktion === f.code);
+    const darf = offen && (protokoll || f.code === meineFunktion());
+    if (!darf && !(b && b.text)) { if (!offen) continue; raster.append(h('div', { class: 'beitrag leer' }, h('h4', {}, f.code), h('p', { class: 'klein' }, '–'))); continue; }
+    if (darf) {
+      const feld = h('textarea', { maxlength: 5000, placeholder: 'Infos, Besprechungspunkte, Fragen' }, b ? b.text : '');
+      const stand = h('span', { class: 'klein' }, b ? 'gespeichert ' + new Date(b.geaendert).toLocaleString('de-CH', { dateStyle: 'short', timeStyle: 'short' }) : '');
+      raster.append(h('div', { class: 'beitrag' + (f.code === meineFunktion() ? ' meins' : '') }, h('h4', {}, f.code), feld,
+        h('div', { class: 'knoepfe links' }, h('button', { class: 'btn klein', onclick: async () => {
+          await db(sb.from('rapport_beitraege').upsert({ rapport_id: r.id, funktion: f.code, text: feld.value }));
+          stand.textContent = 'gespeichert ' + new Date().toLocaleTimeString('de-CH', { timeStyle: 'short' }); } }, 'Speichern'), stand)));
+    } else raster.append(h('div', { class: 'beitrag' }, h('h4', {}, f.code), h('p', { class: 'protokolltext' }, b.text)));
+  }
+  block.append(raster);
+  // Abmachungen dieses Rapports
+  const eigene = abm.filter(a => a.rapport_id === r.id);
+  block.append(h('h3', { class: 'zwischen' }, `Abmachungen (${eigene.length})`),
+    eigene.length ? h('div', { class: 'tabelle' }, ...eigene.map(a => abmZeile(a))) : h('p', { class: 'klein' }, 'Keine.'));
+  if (offen && protokoll) {
+    const f = { funktion: h('select', {}, ...funktionen.filter(x => x.typ !== 'Ordonnanz').map(x => h('option', {}, x.code))),
+      was: h('input', { required: true, maxlength: 500, placeholder: 'Was ist abgemacht?' }), datum: h('input', { type: 'date' }) };
+    block.append(h('form', { class: 'formular reihe', onsubmit: async e => {
+      e.preventDefault();
+      await db(sb.from('todos').insert({ dienst_id: r.dienst_id, rapport_id: r.id, funktion: f.funktion.value, was: f.was.value.trim(), datum: f.datum.value || null, gesperrt: !!f.datum.value }));
+      zeigeRapporte();
+    } }, h('label', {}, 'Funktion', f.funktion), h('label', {}, 'Abmachung', f.was), h('label', {}, 'Termin (leer = nächster Rapport)', f.datum),
+      h('button', { class: 'btn', type: 'submit' }, '+ Abmachung')),
+      h('p', { class: 'klein' }, 'Jede Abmachung kommt sofort in die Terminliste der Funktion. Mit Termin ist sie gesperrt 🔒; ohne Termin kommt sie am nächsten Rapport wieder.'),
+      h('button', { class: 'btn light', onclick: async () => {
+        if (!confirm('Rapport abschliessen? Danach ist er nur noch im Archiv lesbar.')) return;
+        await db(sb.from('rapporte').update({ abgeschlossen: true }).eq('id', r.id)); zeigeRapporte(); } }, 'Rapport abschliessen'));
+  }
+  if (!offen && kdt) block.append(h('button', { class: 'btn light klein', onclick: async () => {
+    await db(sb.from('rapporte').update({ abgeschlossen: false }).eq('id', r.id)); zeigeRapporte(); } }, 'Wieder öffnen'));
+  return block;
+}
+
+function abmZeile(a) {
+  return h('div', { class: 'zeile' + (fertig(a) ? ' fertig' : '') + (a.datum && a.datum < heute() && !fertig(a) ? ' spaet' : '') },
+    h('div', { class: 'datum' }, a.gesperrt ? '🔒 ' : '', a.datum ? datumCH(a.datum) : 'nächster Rapport'),
+    h('div', { class: 'was' }, h('strong', {}, a.was), h('span', { class: 'klein' }, a.funktion)),
+    h('div', { class: 'status s-' + a.status }, STATUS[a.status]),
+    h('div', { class: 'knoepfe' }, kdt && !fertig(a) ? h('button', { class: 'btn klein', onclick: async () => {
+      await db(sb.from('todos').update({ status: 'erledigt' }).eq('id', a.id)); zeigeRapporte(); } }, 'x Erledigt') : null));
+}
+
+function rapportFormular() {
+  const f = { art: h('select', {}, h('option', { value: 'DR' }, 'Dienstrapport (DR)'), h('option', { value: 'KR' }, 'Kompanierapport (KR)')),
+    datum: h('input', { type: 'date', required: true, value: heute() }), zeit: h('input', { pattern: '[0-2][0-9][0-5][0-9]', placeholder: 'z. B. 1730', maxlength: 4 }) };
+  const dialog = h('dialog', { class: 'dialog' });
+  dialog.append(h('form', { class: 'formular', onsubmit: async e => {
+    e.preventDefault();
+    await db(sb.from('rapporte').insert({ dienst_id: auswahl.dienst, art: f.art.value, datum: f.datum.value, zeit: f.zeit.value || null }));
+    dialog.close(); dialog.remove(); zeigeRapporte();
+  } }, h('h3', {}, 'Neuer Rapport'), h('div', { class: 'reihe' }, h('label', {}, 'Art', f.art), h('label', {}, 'Datum', f.datum), h('label', {}, 'Zeit', f.zeit)),
+    h('div', { class: 'knoepfe' }, h('button', { class: 'btn', type: 'submit' }, 'Eröffnen'),
+      h('button', { class: 'btn light', type: 'button', onclick: () => { dialog.close(); dialog.remove(); } }, 'Abbrechen'))));
+  document.body.append(dialog); dialog.showModal();
 }
 
 // ---------- Einstellungen (Kdt) ----------
