@@ -4,15 +4,17 @@ Statische Seite (GitHub Pages) mit Supabase für Login und Datenbank. Kein Build
 
 | Was | Datei |
 |---|---|
-| Datenbank, Rechte, Regeln | `supabase/schema.sql` |
+| Datenbank, Rechte, Regeln | `supabase/schema.sql`, Erweiterungen `supabase/00N_….sql` |
 | Tests der Rechte (`npm i @electric-sql/pglite@0.2.17`, dann `node supabase/test.mjs`) | `supabase/test.mjs` |
 | Supabase-Adresse und öffentlicher Schlüssel | `config.js` |
 | Oberfläche | `index.html`, `app.js`, `style.css` |
+| Wappen je Dienst (Liste `WAPPEN` in app.js) | `wappen/` |
 | supabase-js 2.45.4 (lokal, kein fremder Server) | `vendor/` |
 
 ## Einrichten (einmal)
 1. supabase.com: neues Projekt, Region **Zürich** (falls angeboten, sonst Frankfurt).
 2. SQL Editor: `supabase/schema.sql` einfügen, Run.
+   Danach ebenso `supabase/002_rapporte.sql` (Rapporte, Abmachungen, Wappen). Weitere Dateien `00N_….sql` immer in der Reihenfolge.
 3. SQL Editor, separat (Adresse nie ins Repository):
    `insert into public.mitglieder (email, funktion) values ('<deine militär-adresse, klein>', 'Kdt');`
 4. Authentication → Sign In / Providers: **Confirm email EIN**, minimale Passwortlänge 8, **Anonymous sign-ins AUS**.

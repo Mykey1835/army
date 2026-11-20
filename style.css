@@ -221,3 +221,43 @@ h3.zwischen { margin-top: 32px; }
 }
 .btn.klein { color: var(--weiss); }
 .btn.light, .btn.light.klein { color: var(--graphit); }
+
+/* Wappen */
+.brand { display: flex; align-items: center; gap: 10px; }
+#wappen { height: 40px; width: auto; }
+
+/* Organigramm als Baum */
+.baum { display: grid; gap: 32px; margin: 16px 0 40px; }
+.ebene { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; position: relative; }
+.ebene + .ebene::before { content: ""; position: absolute; top: -32px; left: 50%; width: 2px; height: 32px; background: var(--graphit); }
+.ebene.e3 { border-top: 2px solid var(--graphit); padding-top: 16px; }
+.knoten { width: 230px; background: var(--weiss); border: 1px solid var(--linie); border-radius: 4px; padding: 16px; display: grid; gap: 8px; align-content: start; }
+.knoten.oben { border: 2px solid var(--graphit); }
+.knoten h3, .pool h3 { margin: 0; }
+.knoten .leute { list-style: none; padding: 0; margin: 0; font-size: 15px; }
+.knoten p { margin: 0; }
+.ueber { outline: 2px dashed var(--graphit); outline-offset: 2px; background: var(--hell); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: flex; align-items: center; gap: 4px; border: 1px dashed var(--graphit); border-radius: 99px; padding: 2px 4px 2px 10px; font-size: 13px; cursor: grab; background: var(--weiss); }
+.chip select { font: inherit; font-size: 12px; border: 0; background: var(--hell); border-radius: 99px; padding: 1px 4px; }
+.knoepfe.links { justify-content: flex-start; }
+.pool { border: 1px dashed var(--linie); border-radius: 4px; padding: 16px; display: grid; gap: 10px; }
+
+/* Rapporte */
+.rapport { margin-top: 24px; }
+.beitraege { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.beitrag { border: 1px solid var(--linie); border-radius: 4px; padding: 14px; display: grid; gap: 8px; align-content: start; }
+.beitrag.meins { border: 2px solid var(--graphit); }
+.beitrag.leer { opacity: .6; }
+.beitrag h4 { margin: 0; font-size: 16px; }
+.beitrag textarea { font: inherit; font-size: 15px; min-height: 110px; padding: 8px; border: 1px solid var(--linie); border-radius: 4px; width: 100%; }
+.protokolltext { white-space: pre-wrap; margin: 0; }
+details.archiv { margin-top: 40px; border-top: 1px solid var(--linie); padding-top: 16px; }
+details summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+details.alt-rapport { margin-left: 12px; border-bottom: 1px solid var(--linie); }
+details.alt-rapport summary { font-weight: 400; }
+@media (max-width: 860px) {
+  .ebene + .ebene::before { display: none; }
+  .ebene.e3 { border-top: 0; padding-top: 0; }
+  .knoten { width: 100%; }
+}
