@@ -7,6 +7,7 @@ const nav = document.getElementById('tabs');
 let sb = null;
 let ich = null;          // eigenes Mitglied
 let kdt = false, ordonnanz = false, protokoll = false;
+const DRIVE_ORDNER = '1GsFzMs69qApcSjvBIWe8gyvnA0NucvnE'; // Kopie aus sokol-agents docs/ordner-ids.md (ARMY)
 const WAPPEN = [{ datei: 'ristl-62.png', name: 'Ristl Schulen 62' }];
 let funktionen = [], dienste = [], mitglieder = [];
 let auswahl = { dienst: null, funktion: '' };
@@ -613,6 +614,8 @@ async function zeigeEinstellungen() {
   const offene = dienste.filter(d => dienstStatus(d) !== 'geplant');
   const teil = await db(sb.from('dienst_teilnehmer').select('*'));
   app.replaceChildren(seite('Einstellungen', null,
+    abschnitt('Dateien für Claude', h('p', {}, 'Picasso, Terminliste und andere Unterlagen hier ablegen (am besten als Excel). Claude liest sie und legt die Daten nach deiner Freigabe an. Keine klassifizierten Unterlagen.'),
+      h('a', { class: 'btn', href: 'https://drive.google.com/drive/folders/' + DRIVE_ORDNER, target: '_blank', rel: 'noopener' }, 'Dateien hochladen (Drive-Ordner Army)')),
     abschnitt('Mitglieder einladen', h('form', { class: 'formular reihe', onsubmit: async e => {
       e.preventDefault();
       await db(sb.from('mitglieder').insert({ email: neu.email.value.trim().toLowerCase(), name: neu.name.value.trim() || null, funktion: neu.funktion.value, ober_funktion: neu.ober.value || null }));
