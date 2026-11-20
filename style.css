@@ -262,3 +262,14 @@ details.alt-rapport summary { font-weight: 400; }
   .ebene.e3 { border-top: 0; padding-top: 0; }
   .knoten { width: 100%; }
 }
+
+/* PALF */
+details.beitrag { margin-bottom: 12px; }
+details.beitrag > summary { font-weight: 700; font-size: 17px; }
+.palf { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-top: 8px; }
+.palf h4 { grid-column: 1 / -1; margin: 10px 0 0; font-size: 15px; }
+.palf label { display: grid; gap: 4px; font-size: 13px; color: var(--neben); }
+.palf textarea { font: inherit; font-size: 15px; min-height: 64px; padding: 8px; border: 1px solid var(--linie); border-radius: 4px; width: 100%; }
+.palf label.voll { grid-column: 1 / -1; }
+.palf.lesen { grid-template-columns: 1fr; }
+@media (max-width: 860px) { .palf { grid-template-columns: 1fr; } }

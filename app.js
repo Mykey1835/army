@@ -473,10 +473,18 @@ async function zeigeOrganigramm() {
 
 // ---------- Rapporte ----------
 const fertig = x => x.status === 'erledigt' || x.status === 'negativ';
-const rapportName = r => `${r.art === 'DR' ? 'Dienstrapport' : 'Kompanierapport'} ${datumCH(r.datum)}${r.zeit ? ', ' + r.zeit : ''}`;
+const RAPPORTART = { DR: 'Dienstrapport', KR: 'Kompanierapport', LIK: 'Lagerapport im Kampf (LIK)' };
+const rapportName = r => `${RAPPORTART[r.art] || r.art} ${datumCH(r.datum)}${r.zeit ? ', ' + r.zeit : ''}`;
+// PALF: Personelles, Ausbildung, Logistik, Führung (je Rückblick/Ausblick), dann Divers. Im DR ohne Ausbildung.
+const PALF = [['p', 'Personelles'], ['a', 'Ausbildung'], ['l', 'Logistik'], ['f', 'Führung']];
+const abschnitte = art => [...PALF.filter(([k]) => !(art === 'DR' && k === 'a')).flatMap(([k, n]) => [[k + '_rueck', n, 'Rückblick'], [k + '_aus', n, 'Ausblick']]), ['divers', 'Divers', '']];
+// Reihenfolge im Rapport: Kdt, Four, Hptfw, Zfhr 1…n, Kdt Stv, übrige
+const RANG = { 'Kdt': 0, 'Four': 1, 'Hptfw': 2, 'Zfhr': 3, 'Kdt Stv': 4 };
+const rapportReihenfolge = () => funktionen.filter(f => f.typ !== 'Ordonnanz')
+  .sort((x, y) => ((RANG[x.typ] ?? 9) - (RANG[y.typ] ?? 9)) || x.code.localeCompare(y.code, 'de', { numeric: true }));
 async function zeigeRapporte() {
   const inhalt = h('div', {});
-  app.replaceChildren(seite('Rapporte', 'Dienstrapport (DR) und Kompanierapport (KR)', abschnitt(null, dienstWahl(zeigeRapporte), inhalt)));
+  app.replaceChildren(seite('Rapporte', 'Dienstrapport (DR), Kompanierapport (KR), Lagerapport im Kampf (LIK)', abschnitt(null, dienstWahl(zeigeRapporte), inhalt)));
   if (!auswahl.dienst) return;
   const raps = await db(sb.from('rapporte').select('*').eq('dienst_id', auswahl.dienst).order('datum').order('zeit'));
   const ids = raps.map(r => r.id);
@@ -501,23 +509,43 @@ function rapportBlock(r, raps, beitr, abm, offen) {
     block.append(h('h3', { class: 'zwischen' }, `Pendenzen aus früheren Rapporten (${pend.length})`),
       pend.length ? h('div', { class: 'tabelle' }, ...pend.map(a => abmZeile(a))) : h('p', { class: 'klein' }, 'Keine.'));
   }
-  // Beiträge der Funktionen
-  block.append(h('h3', { class: 'zwischen' }, 'Punkte der Funktionen'));
-  const raster = h('div', { class: 'beitraege' });
-  for (const f of funktionen.filter(x => x.typ !== 'Ordonnanz')) {
-    const b = beitr.find(x => x.rapport_id === r.id && x.funktion === f.code);
+  // Beiträge der Funktionen nach PALF
+  block.append(h('h3', { class: 'zwischen' }, 'Punkte der Funktionen (PALF)'));
+  const teile = abschnitte(r.art);
+  for (const f of rapportReihenfolge()) {
+    const eigene = beitr.filter(x => x.rapport_id === r.id && x.funktion === f.code && x.text);
     const darf = offen && (protokoll || f.code === meineFunktion());
-    if (!darf && !(b && b.text)) { if (!offen) continue; raster.append(h('div', { class: 'beitrag leer' }, h('h4', {}, f.code), h('p', { class: 'klein' }, '–'))); continue; }
+    if (!darf && !eigene.length && !offen) continue;
+    const text = k => (eigene.find(x => x.abschnitt === k) || {}).text || '';
+    const karte = h('details', { class: 'beitrag' + (f.code === meineFunktion() ? ' meins' : ''), open: darf || eigene.length ? true : null },
+      h('summary', {}, f.code, eigene.length ? '' : h('span', { class: 'klein' }, ' – noch nichts eingetragen')));
     if (darf) {
-      const feld = h('textarea', { maxlength: 5000, placeholder: 'Infos, Besprechungspunkte, Fragen' }, b ? b.text : '');
-      const stand = h('span', { class: 'klein' }, b ? 'gespeichert ' + new Date(b.geaendert).toLocaleString('de-CH', { dateStyle: 'short', timeStyle: 'short' }) : '');
-      raster.append(h('div', { class: 'beitrag' + (f.code === meineFunktion() ? ' meins' : '') }, h('h4', {}, f.code), feld,
-        h('div', { class: 'knoepfe links' }, h('button', { class: 'btn klein', onclick: async () => {
-          await db(sb.from('rapport_beitraege').upsert({ rapport_id: r.id, funktion: f.code, text: feld.value }));
-          stand.textContent = 'gespeichert ' + new Date().toLocaleTimeString('de-CH', { timeStyle: 'short' }); } }, 'Speichern'), stand)));
-    } else raster.append(h('div', { class: 'beitrag' }, h('h4', {}, f.code), h('p', { class: 'protokolltext' }, b.text)));
+      const felder = {};
+      const raster = h('div', { class: 'palf' });
+      let gruppe = '';
+      for (const [k, name, teil] of teile) {
+        if (name !== gruppe) { raster.append(h('h4', {}, name)); gruppe = name; }
+        felder[k] = h('textarea', { maxlength: 5000, 'aria-label': `${name} ${teil}`.trim(), placeholder: teil || 'Weitere Punkte' }, text(k));
+        raster.append(h('label', { class: k === 'divers' ? 'voll' : null }, teil, felder[k]));
+      }
+      const stand = h('span', { class: 'klein' });
+      karte.append(raster, h('div', { class: 'knoepfe links' }, h('button', { class: 'btn klein', onclick: async () => {
+        const zeilen = teile.map(([k]) => ({ rapport_id: r.id, funktion: f.code, abschnitt: k, text: felder[k].value }))
+          .filter(z => z.text.trim() || text(z.abschnitt));
+        if (zeilen.length) await db(sb.from('rapport_beitraege').upsert(zeilen));
+        stand.textContent = 'gespeichert ' + new Date().toLocaleTimeString('de-CH', { timeStyle: 'short' }); } }, 'Speichern'), stand));
+    } else {
+      let gruppe = '';
+      const liste = h('div', { class: 'palf lesen' });
+      for (const [k, name, teil] of teile) {
+        if (!text(k)) continue;
+        if (name !== gruppe) { liste.append(h('h4', {}, name)); gruppe = name; }
+        liste.append(h('div', {}, teil ? h('span', { class: 'klein' }, teil) : null, h('p', { class: 'protokolltext' }, text(k))));
+      }
+      karte.append(eigene.length ? liste : h('p', { class: 'klein' }, '–'));
+    }
+    block.append(karte);
   }
-  block.append(raster);
   // Abmachungen dieses Rapports
   const eigene = abm.filter(a => a.rapport_id === r.id);
   block.append(h('h3', { class: 'zwischen' }, `Abmachungen (${eigene.length})`),
@@ -551,7 +579,7 @@ function abmZeile(a) {
 }
 
 function rapportFormular() {
-  const f = { art: h('select', {}, h('option', { value: 'DR' }, 'Dienstrapport (DR)'), h('option', { value: 'KR' }, 'Kompanierapport (KR)')),
+  const f = { art: h('select', {}, h('option', { value: 'DR' }, 'Dienstrapport (DR)'), h('option', { value: 'KR' }, 'Kompanierapport (KR)'), h('option', { value: 'LIK' }, 'Lagerapport im Kampf (LIK)')),
     datum: h('input', { type: 'date', required: true, value: heute() }), zeit: h('input', { pattern: '[0-2][0-9][0-5][0-9]', placeholder: 'z. B. 1730', maxlength: 4 }) };
   const dialog = h('dialog', { class: 'dialog' });
   dialog.append(h('form', { class: 'formular', onsubmit: async e => {

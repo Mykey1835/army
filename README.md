@@ -14,7 +14,7 @@ Statische Seite (GitHub Pages) mit Supabase für Login und Datenbank. Kein Build
 ## Einrichten (einmal)
 1. supabase.com: neues Projekt, Region **Zürich** (falls angeboten, sonst Frankfurt).
 2. SQL Editor: `supabase/schema.sql` einfügen, Run.
-   Danach ebenso `supabase/002_rapporte.sql` (Rapporte, Abmachungen, Wappen). Weitere Dateien `00N_….sql` immer in der Reihenfolge.
+   Danach ebenso `supabase/002_rapporte.sql` (Rapporte, Abmachungen, Wappen) und `supabase/003_palf.sql` (LIK, PALF). Weitere Dateien `00N_….sql` immer in der Reihenfolge.
 3. SQL Editor, separat (Adresse nie ins Repository):
    `insert into public.mitglieder (email, funktion) values ('<deine militär-adresse, klein>', 'Kdt');`
 4. Authentication → Sign In / Providers: **Confirm email EIN**, minimale Passwortlänge 8, **Anonymous sign-ins AUS**.

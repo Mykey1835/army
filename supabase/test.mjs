@@ -13,6 +13,7 @@ grant execute on function auth.uid() to authenticated, anon;
 let sql = fs.readFileSync(new URL('./schema.sql', import.meta.url),'utf8');
 await db.exec(sql);
 await db.exec(fs.readFileSync(new URL('./002_rapporte.sql', import.meta.url),'utf8'));
+await db.exec(fs.readFileSync(new URL('./003_palf.sql', import.meta.url),'utf8'));
 await db.exec(`insert into public.mitglieder (email, funktion) values ('kdt@x.ch', 'Kdt')`);
 await db.exec(`grant usage on schema public to authenticated;`);
 let ok=0, fail=0;
@@ -132,4 +133,13 @@ await as(KO, ()=>q(`insert into todos(dienst_id,was,funktion,rapport_id,gesperrt
 r = await q(`select gesperrt from todos where was='ohne Termin'`); console.log('C: Abmachung ohne Termin gesperrt:', r.rows[0].gesperrt, '(erwartet false)');
 await t('Wappen-Name geprüft', ()=>as(K, ()=>q(`update dienste set wappen='../x.png' where id=$1`,[D2])), true);
 await t('Wappen setzen', ()=>as(K, ()=>q(`update dienste set wappen='ristl-62.png' where id=$1`,[D2])));
+// PALF und LIK
+const RL = (await as(K, ()=>q(`insert into rapporte(dienst_id,art,datum) values ($1,'LIK',$2) returning id`,[D2,d(6)]))).rows[0].id;
+await t('LIK: Four schreibt Ausbildung Rückblick', ()=>as(F, ()=>q(`insert into rapport_beitraege(rapport_id,funktion,abschnitt,text) values ($1,'Four','a_rueck','ok')`,[RL])));
+await t('LIK: Four schreibt Logistik Ausblick daneben', ()=>as(F, ()=>q(`insert into rapport_beitraege(rapport_id,funktion,abschnitt,text) values ($1,'Four','l_aus','Fassung Mi')`,[RL])));
+const RD = (await as(K, ()=>q(`insert into rapporte(dienst_id,art,datum) values ($1,'DR',$2) returning id`,[D2,d(6)]))).rows[0].id;
+await t('DR: kein Punkt Ausbildung', ()=>as(F, ()=>q(`insert into rapport_beitraege(rapport_id,funktion,abschnitt,text) values ($1,'Four','a_aus','x')`,[RD])), true);
+await t('DR: Personelles erlaubt', ()=>as(F, ()=>q(`insert into rapport_beitraege(rapport_id,funktion,abschnitt,text) values ($1,'Four','p_rueck','x')`,[RD])));
+await t('Unbekannter Abschnitt gesperrt', ()=>as(F, ()=>q(`insert into rapport_beitraege(rapport_id,funktion,abschnitt,text) values ($1,'Four','zz','x')`,[RD])), true);
+await t('Upsert mehrerer Abschnitte', ()=>as(F, ()=>q(`insert into rapport_beitraege(rapport_id,funktion,abschnitt,text) values ($1,'Four','p_rueck','neu'),($1,'Four','divers','d') on conflict (rapport_id,funktion,abschnitt) do update set text=excluded.text`,[RD])));
 console.log('OK', ok, 'FEHLER', fail);
