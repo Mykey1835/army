@@ -234,6 +234,7 @@ function anleitung() {
     ['3', 'Melden', '«Erledigt (x)» oder «Nichts zu melden (n)». Meldet deine Ordonnanz «vorbereitet», prüfst du und schliesst ab.'],
     ['4', 'Rapporte', 'Unter «Rapporte» trägst du vor dem DR oder KR deine Punkte im eigenen Feld ein. Abmachungen landen automatisch in deiner Terminliste; offene kommen am nächsten Rapport wieder.']];
   if (kdt) a.push(['5', 'Führen', 'Unter «Dienste» Dienste anlegen und freischalten, unter «Organigramm» sehen, wer online ist und wer was offen hat, unter «Einstellungen» Leute einladen.']);
+  if (kdt) a.push(['6', 'Unterlagen hochladen', 'Unter «Einstellungen» steht «Was lade ich wo hoch?»: Terminliste direkt bei Dienste importieren, Picasso als PDF in den Drive-Ordner Army legen und Claude die Rapport-Liste machen lassen.']);
   return a;
 }
 
@@ -493,7 +494,8 @@ async function zeigeRapporte() {
   const [beitr, abm] = ids.length ? await Promise.all([
     db(sb.from('rapport_beitraege').select('*').in('rapport_id', ids)),
     db(sb.from('todos').select('*').in('rapport_id', ids))]) : [[], []];
-  if (protokoll) inhalt.append(h('button', { class: 'btn', onclick: () => rapportFormular() }, '+ Neuer Rapport'));
+  if (protokoll) inhalt.append(h('div', { class: 'knoepfe links' }, h('button', { class: 'btn', onclick: () => rapportFormular() }, '+ Neuer Rapport'),
+    h('button', { class: 'btn light', onclick: () => rapporteEinfuegen(raps) }, 'Rapporte einfügen (Liste von Claude)')));
   const offen = raps.filter(r => !r.abgeschlossen), alt = raps.filter(r => r.abgeschlossen).reverse();
   if (!offen.length) inhalt.append(h('p', {}, 'Kein offener Rapport.' + (protokoll ? '' : ' Der Kdt oder seine Ordonnanz eröffnet ihn.')));
   for (const r of offen) inhalt.append(rapportBlock(r, raps, beitr, abm, true));
@@ -580,6 +582,37 @@ function abmZeile(a) {
       await db(sb.from('todos').update({ status: 'erledigt' }).eq('id', a.id)); zeigeRapporte(); } }, 'x Erledigt') : null));
 }
 
+// Liste aus dem Picasso (von Claude gelesen) einfügen: je Zeile «KR 03.02.2027 1730»
+function rapporteEinfuegen(raps) {
+  const feld = h('textarea', { rows: 10, placeholder: 'DR 03.02.2027 0700\nKR 03.02.2027 1730\nLIK 05.02.2027 1200' });
+  const vorschau = h('div', {});
+  let neu = [];
+  const pruefen = () => {
+    const vorhanden = new Set(raps.map(r => `${r.art}|${r.datum}|${r.zeit || ''}`));
+    neu = []; const fehler = [];
+    for (const zeile of feld.value.split('\n').map(z => z.trim()).filter(Boolean)) {
+      const m = zeile.match(/^(DR|KR|LIK)\s+(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+([0-2]\d[0-5]\d))?$/i);
+      if (!m) { fehler.push(zeile); continue; }
+      const r = { art: m[1].toUpperCase(), datum: `${m[4]}-${m[3].padStart(2, '0')}-${m[2].padStart(2, '0')}`, zeit: m[5] || null };
+      if (!vorhanden.has(`${r.art}|${r.datum}|${r.zeit || ''}`)) { neu.push(r); vorhanden.add(`${r.art}|${r.datum}|${r.zeit || ''}`); }
+    }
+    vorschau.replaceChildren(h('p', {}, `${neu.length} neue Rapporte` + (fehler.length ? `, ${fehler.length} Zeilen nicht verstanden: ${fehler.join(' · ')}` : '') + '.'));
+  };
+  feld.addEventListener('input', pruefen);
+  const dialog = h('dialog', { class: 'dialog' });
+  const schliessen = () => { dialog.close(); dialog.remove(); };
+  dialog.append(h('div', { class: 'formular' }, h('h3', {}, 'Rapporte einfügen'),
+    h('p', { class: 'klein' }, 'Die Liste, die Claude aus dem Picasso gelesen hat, hier einfügen. Pro Zeile: Art (DR, KR oder LIK), Datum, Zeit. Schon vorhandene Rapporte werden übersprungen.'),
+    feld, vorschau,
+    h('div', { class: 'knoepfe links' }, h('button', { class: 'btn', type: 'button', onclick: async () => {
+      pruefen();
+      if (!neu.length) return meldung('Keine neuen Rapporte.', 'fehler');
+      await db(sb.from('rapporte').insert(neu.map(r => ({ ...r, dienst_id: auswahl.dienst }))));
+      meldung(`${neu.length} Rapporte angelegt.`, 'ok'); schliessen(); zeigeRapporte();
+    } }, 'Anlegen'), h('button', { class: 'btn light', type: 'button', onclick: schliessen }, 'Abbrechen'))));
+  document.body.append(dialog); dialog.showModal();
+}
+
 function rapportFormular() {
   const f = { art: h('select', {}, h('option', { value: 'DR' }, 'Dienstrapport (DR)'), h('option', { value: 'KR' }, 'Kompanierapport (KR)'), h('option', { value: 'LIK' }, 'Lagerapport im Kampf (LIK)')),
     datum: h('input', { type: 'date', required: true, value: heute() }), zeit: h('input', { pattern: '[0-2][0-9][0-5][0-9]', placeholder: 'z. B. 1730', maxlength: 4 }) };
@@ -616,7 +649,10 @@ async function zeigeEinstellungen() {
   const offene = dienste.filter(d => dienstStatus(d) !== 'geplant');
   const teil = await db(sb.from('dienst_teilnehmer').select('*'));
   app.replaceChildren(seite('Einstellungen', null,
-    abschnitt('Dateien für Claude', h('p', {}, 'Picasso, Terminliste und andere Unterlagen hier ablegen (am besten als Excel). Claude liest sie und legt die Daten nach deiner Freigabe an. Keine klassifizierten Unterlagen.'),
+    abschnitt('Was lade ich wo hoch?', h('div', { class: 'tabelle' },
+        h('div', { class: 'zeile' }, h('div', { class: 'datum' }, 'Terminliste (Excel)'), h('div', { class: 'was' }, h('strong', {}, 'Direkt hier: Dienste → beim Dienst «Terminliste importieren»'), h('span', { class: 'klein' }, 'Vorschau prüfen, dann übernehmen. Vorher URE und KVK als Dienste anlegen.'))),
+        h('div', { class: 'zeile' }, h('div', { class: 'datum' }, 'Picasso (PDF)'), h('div', { class: 'was' }, h('strong', {}, 'Drive-Ordner Army (Knopf unten), dann Claude schreiben: «Lies den Picasso im Army-Ordner und mach mir die Rapport-Liste»'), h('span', { class: 'klein' }, 'Die Liste von Claude unter Rapporte → «Rapporte einfügen» übernehmen.'))),
+        h('div', { class: 'zeile' }, h('div', { class: 'datum' }, 'Andere Unterlagen'), h('div', { class: 'was' }, h('strong', {}, 'Drive-Ordner Army, dann Claude sagen, was daraus werden soll'), h('span', { class: 'klein' }, 'Keine klassifizierten Unterlagen.')))),
       h('a', { class: 'btn', href: 'https://drive.google.com/drive/folders/' + DRIVE_ORDNER, target: '_blank', rel: 'noopener' }, 'Dateien hochladen (Drive-Ordner Army)')),
     abschnitt('Mitglieder einladen', h('form', { class: 'formular reihe', onsubmit: async e => {
       e.preventDefault();
