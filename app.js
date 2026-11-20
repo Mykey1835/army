@@ -293,7 +293,7 @@ function todoFormular(x) {
     e.preventDefault();
     const daten = { was: f.was.value.trim(), grundlage: f.grundlage.value.trim() || null, an_wen: f.an_wen.value.trim() || null,
       wie: f.wie.value || null, dienstuebergreifend: f.ueber.checked, notiz: f.notiz.value.trim() || null };
-    if (kdt) { daten.funktion = f.funktion.value; daten.gesperrt = f.gesperrt.checked; }
+    if (kdt) { daten.funktion = f.funktion.value; daten.gesperrt = f.gesperrt.checked && f.art.value !== 'kein'; } // ohne Termin: Funktion plant selbst
     if (!gesperrt) {
       if (f.art.value === 'relativ') { const v = f.rel.value; daten.anker = v.slice(1); daten.tage = (v[0] === '-' ? -1 : 1) * (parseInt(f.tage.value, 10) || 0); daten.datum = null; }
       else { daten.anker = null; daten.tage = null; daten.datum = f.art.value === 'datum' ? f.datum.value || null : null; }
@@ -315,7 +315,7 @@ function todoFormular(x) {
     h('div', { class: 'reihe' }, h('label', {}, 'Datum', f.datum), h('label', {}, 'Tage', f.tage), h('label', {}, 'relativ', f.rel)),
     h('div', { class: 'reihe' }, h('label', {}, 'Grundlage', f.grundlage), h('label', {}, 'an wen', f.an_wen), h('label', {}, 'wie', f.wie)),
     h('label', { class: 'haken' }, f.ueber, 'dienstübergreifend (kommt im nächsten Dienst wieder)'),
-    kdt ? h('label', { class: 'haken' }, f.gesperrt, '🔒 Termin sperren (Funktion kann ihn nicht verschieben)') : null,
+    kdt ? h('label', { class: 'haken' }, f.gesperrt, '🔒 Termin sperren (gilt nur mit Termin; Funktion kann ihn nicht verschieben)') : null,
     h('label', {}, 'Notiz', f.notiz),
     h('div', { class: 'knoepfe' }, h('button', { class: 'btn', type: 'submit' }, 'Speichern'),
       h('button', { class: 'btn light', type: 'button', onclick: () => { dialog.close(); dialog.remove(); } }, 'Abbrechen'))));
@@ -358,7 +358,7 @@ function dienstFormular(d, teil) {
   dialog.append(h('form', { class: 'formular', onsubmit: async e => {
     e.preventDefault();
     if (f.ende.value < f.beginn.value) return meldung('Ende liegt vor Beginn.', 'fehler');
-    const daten = { art: f.art.value, titel: f.titel.value.trim(), beginn: f.beginn.value, ende: f.ende.value };
+    const daten = { art: f.art.value, titel: f.titel.value.trim(), beginn: f.beginn.value, ende: f.ende.value, nur_teilnehmer: nur.checked };
     const gespeichert = d.id ? await db(sb.from('dienste').update(daten).eq('id', d.id).select().single())
                              : await db(sb.from('dienste').insert(daten).select().single());
     await db(sb.rpc('teilnehmer_setzen', { d_id: gespeichert.id, nur: nur.checked, adressen: haken.filter(c => c.checked).map(c => c.value) }));

@@ -98,4 +98,9 @@ await db.exec(`delete from auth.users where email='weg@x.ch'`);
 r = await q(`select user_id from mitglieder where email='weg@x.ch'`); console.log('user_id nach Löschen des Kontos:', r.rows[0].user_id, '(erwartet null)');
 r = await q(`select grantee, privilege_type from information_schema.role_table_grants where table_schema='public' and grantee in ('anon','authenticated') and privilege_type not in ('SELECT','INSERT','UPDATE','DELETE')`);
 console.log('zu breite Rechte:', r.rows.length, '(erwartet 0)');
+// Nachkontrolle Prüfer
+const T6 = (await as(K, ()=>q(`insert into todos(dienst_id,was,funktion,gesperrt) values ($1,'Ohne Termin vom Kdt','Four',false) returning id`,[D2]))).rows[0].id;
+await t('Four setzt Termin bei Kdt-To-do ohne Termin', ()=>as(F, ()=>q(`update todos set datum=$2 where id=$1`,[T6,d(12)])));
+const D5 = (await as(K, ()=>q(`insert into dienste(art,titel,beginn,ende,nur_teilnehmer) values ('URB','URB eng',$1,$1,true) returning id`,[d(2)]))).rows[0].id;
+r = await as(F, ()=>q(`select titel from dienste where id=$1`,[D5])); console.log('neuer Dienst nur_teilnehmer ohne Liste sichtbar:', r.rows.length, '(erwartet 0)');
 console.log('OK', ok, 'FEHLER', fail);
