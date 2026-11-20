@@ -25,4 +25,12 @@ abschnitte:
         text: Picasso, Terminliste, Rapporte und Meldungen.
         knopf_text: Zur Zusammenarbeit
         knopf_link: /zusammenarbeit/
+      - titel: Checklisten
+        text: Arbeitshilfe je Funktion für vor, während und nach dem Dienst.
+        knopf_text: Zu den Checklisten
+        knopf_link: /checklisten/
+      - titel: Rapporte
+        text: Ablauf eines Rapports und wie gemeldet wird.
+        knopf_text: Zu den Rapporten
+        knopf_link: /rapporte/
 ---
