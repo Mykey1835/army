@@ -17,7 +17,8 @@ async function xlsxLesen(datei) {
     if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('Excel-Datei beschädigt.');
     const nLen = dv.getUint16(p + 28, true), xLen = dv.getUint16(p + 30, true), kLen = dv.getUint16(p + 32, true);
     const name = new TextDecoder().decode(buf.subarray(p + 46, p + 46 + nLen));
-    dateien[name] = { methode: dv.getUint16(p + 10, true), groesse: dv.getUint32(p + 20, true), lokal: dv.getUint32(p + 42, true) };
+    dateien[name] = { methode: dv.getUint16(p + 10, true), groesse: dv.getUint32(p + 20, true), entpackt: dv.getUint32(p + 24, true), lokal: dv.getUint32(p + 42, true) };
+    if (dateien[name].entpackt > 50 * 1024 * 1024) throw new Error('Datei entpackt zu gross (max. 50 MB).');
     p += 46 + nLen + xLen + kLen;
   }
   const lies = async name => {
@@ -36,10 +37,13 @@ async function xlsxLesen(datei) {
   if (!xml) throw new Error('Kein Tabellenblatt gefunden.');
   const zeilen = [];
   for (const row of xml.getElementsByTagName('row')) {
+    if (zeilen.length >= 2000) break; // Grenze: höchstens 2000 Zeilen
     const z = [];
+    let lauf = -1;
     for (const c of row.getElementsByTagName('c')) {
       const ref = c.getAttribute('r') || '';
-      const spalte = ref.replace(/\d+/g, '').split('').reduce((s, ch) => s * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+      lauf = ref ? ref.replace(/\d+/g, '').split('').reduce((s, ch) => s * 26 + ch.charCodeAt(0) - 64, 0) - 1 : lauf + 1;
+      const spalte = lauf;
       const typ = c.getAttribute('t');
       const v = c.getElementsByTagName('v')[0];
       let wert = null;
@@ -55,7 +59,10 @@ async function xlsxLesen(datei) {
 const excelDatum = n => typeof n === 'number' && n > 20000 && n < 80000 ? new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 864e5).toISOString().slice(0, 10) : null;
 const sauber = t => (t == null ? '' : String(t)).replace(/\s+/g, ' ').trim();
 // Personaldaten (Mailadressen, Telefonnummern) nicht übernehmen
-const ohnePersonaldaten = t => sauber(t).replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '[Adresse]').replace(/\+?\d[\d ]{8,}\d/g, '[Nummer]');
+const ohnePersonaldaten = t => sauber(t)
+  .replace(/[\w.+-]+\s*(@|\(at\)|\[at\])\s*[\w-]+(\.[\w-]+)+/gi, '[Adresse]')
+  .replace(/756[.\s]?\d{4}[.\s]?\d{4}[.\s]?\d{2}/g, '[AHV]')
+  .replace(/(\+|00)?\d[\d\s\/.\-()]{7,}\d/g, x => x.replace(/\D/g, '').length >= 9 ? '[Nummer]' : x);
 
 // ---------- Zuordnung «durch wen» → Funktion ----------
 function funktionAus(durch) {
@@ -90,7 +97,7 @@ function terminAus(wann, dienst) {
   if ((m = w.match(/^(\d+)\s*tage?\s+vor\s+entlassung/))) return { anker: 'Ende', tage: -m[1] };
   if ((m = w.match(/^(\d+)\.\s*letzter\s+(wk-|dienst)?tag/))) return { anker: 'Ende', tage: -(m[1] - 1) };
   if (/^letzter\s+(wk-|dienst)?tag/.test(w)) return { anker: 'Ende', tage: 0 };
-  if ((m = w.match(/^(\w+)\s+(\d+)\s*wo(che)?\s+nach\s+(wk|dienst)/)) && m[1] in WOCHENTAG) return { anker: 'Ende', tage: +m[2] * 7 + WOCHENTAG[m[1]] - 4 };
+  if ((m = w.match(/^(\w+)\s+(\d+)\s*wo(che)?\s+nach\s+(wk|dienst)/)) && Object.hasOwn(WOCHENTAG, m[1])) return { anker: 'Ende', tage: +m[2] * 7 + WOCHENTAG[m[1]] - 4 };
   if ((m = w.match(/^(\d+)\.\s*tag\s+(wk-|dienst)?woche/))) return { anker: 'Beginn', tage: +m[1] - 1 };
   if ((m = w.match(/^(\d+)\.\s*(wk-|dienst)?woche/))) return { anker: 'Beginn', tage: (m[1] - 1) * 7 + tagIn(w) };
   if (/^(anlässlich )?(start|beginn|dienstbeginn)/.test(w)) return { anker: 'Beginn', tage: 0 };
@@ -100,7 +107,7 @@ function terminAus(wann, dienst) {
     const b = bezug(m[4] === 'ure' ? 'URE' : m[4] === 'kvk' ? 'KVK' : 'URB');
     return b ? { datum: plusTage(b, (m[3] === 'vor' ? -1 : 1) * m[1] * EINHEIT[m[2]]) } : null;
   }
-  if ((m = w.match(/^(\w+)\s+vor\s+kvk/)) && m[1] in WOCHENTAG) { const b = bezug('KVK'); return b ? { datum: plusTage(b, WOCHENTAG[m[1]] - 7) } : null; }
+  if ((m = w.match(/^(\w+)\s+vor\s+kvk/)) && Object.hasOwn(WOCHENTAG, m[1])) { const b = bezug('KVK'); return b ? { datum: plusTage(b, WOCHENTAG[m[1]] - 7) } : null; }
   if ((m = w.match(/^(\d+)\.\s*tag\s+kvk/))) { const b = bezug('KVK'); return b ? { datum: plusTage(b, m[1] - 1) } : null; }
   if (/^ure\b/.test(w)) { const b = bezug('URE'); return b ? { datum: b } : null; }
   if (/^(ura\/urb|urb)\b/.test(w)) { const b = bezug('URB'); return b ? { datum: b } : null; }
@@ -119,6 +126,7 @@ function terminlisteAuswerten(zeilen, dienst) {
     if (!z || !sauber(feld(z, 'was'))) continue;
     const wann = sauber(feld(z, 'wann'));
     let termin = terminAus(wann, dienst);
+    if (termin && termin.anker && !(Math.abs(termin.tage) <= 400)) termin = null; // ausserhalb −400…400 Tage: von Hand terminieren
     if (!termin) { // festes Datum nur, wenn es zum Dienst passt (Vorlagen tragen oft alte Jahre)
       const dat = excelDatum(feld(z, 'datum'));
       if (dat && dat >= plusTage(dienst.beginn, -400) && dat <= plusTage(dienst.ende, 60)) termin = { datum: dat };
@@ -136,7 +144,7 @@ function terminlisteAuswerten(zeilen, dienst) {
         grundlage: ohnePersonaldaten(feld(z, 'grundlage')).slice(0, 300) || null,
         an_wen: ohnePersonaldaten(feld(z, 'an wen')).slice(0, 300) || null,
         wie: /^schriftlich$/i.test(wieRoh) ? 'schriftlich' : /^mündlich$/i.test(wieRoh) ? 'mündlich' : null,
-        notiz: notiz.slice(0, 1000),
+        notiz: ohnePersonaldaten(notiz).slice(0, 1000),
         anker: termin?.anker || null, tage: termin?.anker ? termin.tage : null, datum: termin?.datum || null,
       },
     });
@@ -177,7 +185,7 @@ function terminlisteImport(dienst) {
         dienstuebergreifend: ueber.checked, gesperrt: !!(w.e.daten.datum || w.e.daten.anker) }));
       if (!neu.length) return meldung('Nichts ausgewählt.', 'fehler');
       knopf.disabled = true;
-      for (let i = 0; i < neu.length; i += 100) await db(sb.from('todos').insert(neu.slice(i, i + 100)));
+      await db(sb.from('todos').insert(neu)); // ein Aufruf: alles oder nichts
       meldung(`${neu.length} To-dos übernommen.`, 'ok'); schliessen(); auswahl.dienst = dienst.id; location.hash = '#termine'; zeige();
     } }, 'Übernehmen');
     const titel = h('p', {});
