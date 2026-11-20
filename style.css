@@ -225,6 +225,7 @@ h3.zwischen { margin-top: 32px; }
 /* Wappen */
 .brand { display: flex; align-items: center; gap: 10px; }
 #wappen { height: 40px; width: auto; }
+#wappen[hidden] { display: none; }
 
 /* Organigramm als Baum */
 .baum { display: grid; gap: 32px; margin: 16px 0 40px; }
