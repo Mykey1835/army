@@ -173,7 +173,11 @@ function meineFunktion() { return kdt ? 'Kdt' : (ordonnanz ? ich.ober_funktion :
 function zeigeWappen() {
   const d = dienste.find(x => x.id === auswahl.dienst);
   const img = document.getElementById('wappen'), icon = document.getElementById('favicon');
-  if (d && d.wappen) { img.src = 'wappen/' + d.wappen; img.hidden = false; icon.href = 'wappen/' + d.wappen; }
+  if (d && d.wappen) {
+    const pfad = '/wappen/' + encodeURIComponent(d.wappen) + '?v=2';
+    img.onerror = () => { img.hidden = true; }; // Bild fehlt: nichts Kaputtes zeigen
+    img.src = pfad; img.hidden = false; icon.href = pfad;
+  }
   else { img.hidden = true; img.removeAttribute('src'); icon.href = 'data:,'; }
 }
 function dienstWahl(neuZeigen) {
