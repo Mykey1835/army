@@ -1,5 +1,13 @@
-# army.mikesokol.ch
+# army.mikesokol.ch – Plattform für das Kader
 
-Statische Infoseiten fürs Kader, veröffentlicht über GitHub Pages (Jekyll baut GitHub automatisch). Gleiches Design wie mikesokol.ch (`style.css`, `_layouts`, `_includes` von dort übernommen; bei Änderungen dort hier nachführen).
+Statische Seite (GitHub Pages) mit Supabase für Login und Datenbank. Kein Build-Schritt.
 
-Keine Befehle, keine Personaldaten, keine klassifizierten Inhalte. Texte: `_seiten/*.md`, Bausteine wie im README von mikesokol-website.
+| Was | Datei |
+|---|---|
+| Datenbank, Rechte, Regeln (einmal im Supabase SQL Editor ausführen) | `supabase/schema.sql` |
+| Supabase-Adresse und öffentlicher Schlüssel | `config.js` |
+| Oberfläche | `index.html`, `app.js` |
+| Aussehen (Basis von mikesokol.ch) | `style.css` |
+
+Regeln: Zugang nur auf Einladung (Tabelle `mitglieder`). Keine Befehle, keine klassifizierten Inhalte, keine Personaldaten erfassen.
+Frühere Infoseiten: Git-Verlauf, Commit «Neue Seiten Checklisten und Rapporte».

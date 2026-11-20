@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Army – Mike Sokol</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#start">ARMY · MIKE SOKOL</a>
+    <button class="menu-btn" type="button" aria-expanded="false" aria-controls="tabs">Menü</button>
+    <nav aria-label="Hauptnavigation"><ul class="tabs" id="tabs"></ul></nav>
+  </div>
+</header>
+<main id="app"></main>
+<footer>
+  <div class="wrap">
+    <span>© 2026 Mike Sokol</span>
+    <span><a href="https://mikesokol.ch">mikesokol.ch</a> · Kein Tracking</span>
+  </div>
+</footer>
+<script>
+  var b = document.querySelector('.menu-btn'), t = document.getElementById('tabs');
+  b.addEventListener('click', function () { var o = t.classList.toggle('open'); b.setAttribute('aria-expanded', o); });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -169,3 +169,55 @@ footer a { color: var(--neben); }
 /* Wappen im Zeitstrahl */
 .timeline li.mit-wappen { min-height: 76px; padding-left: 90px; }
 .timeline li .wappen { position: absolute; left: 24px; top: -4px; width: 54px; height: 72px; object-fit: contain; }
+
+/* ---------- Plattform ---------- */
+.formular { display: grid; gap: 14px; }
+.formular.schmal { max-width: 420px; }
+.formular label { display: grid; gap: 4px; font-size: 14px; color: var(--neben); }
+.formular input, .formular select, .formular textarea, .filter select {
+  font: inherit; font-size: 16px; color: var(--graphit); padding: 9px 10px;
+  border: 1px solid var(--linie); border-radius: 4px; background: var(--weiss); width: 100%;
+}
+.formular textarea { min-height: 70px; }
+.formular .btn { margin-top: 4px; justify-self: start; border: 0; cursor: pointer; font: inherit; font-weight: 700; }
+.formular.reihe, .reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+label.haken { display: flex; gap: 8px; align-items: center; color: var(--graphit); font-size: 15px; }
+label.haken input { width: auto; }
+.haken-liste { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px; }
+button.btn { border: 0; cursor: pointer; font: inherit; font-weight: 700; }
+.btn.light { border: 1px solid var(--graphit); }
+.btn.klein { padding: 6px 12px; font-size: 14px; margin-top: 0; }
+.klein { font-size: 13px; color: var(--neben); }
+.hinweis { color: var(--neben); }
+.gross { font-size: 40px; font-weight: 700; margin: 0 0 8px; }
+.liste li { margin-bottom: 8px; }
+.filter { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.filter label { display: grid; gap: 4px; font-size: 14px; color: var(--neben); min-width: 220px; }
+h3.zwischen { margin-top: 32px; }
+.tabelle { border-top: 1px solid var(--linie); margin-top: 12px; }
+.zeile { display: grid; grid-template-columns: 150px 1fr 150px auto; gap: 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--linie); }
+.zeile.kopf { font-size: 13px; color: var(--neben); }
+.zeile .was { display: grid; gap: 2px; }
+.zeile .notiz { font-size: 13px; background: var(--hell); padding: 2px 8px; border-radius: 4px; }
+.zeile.fertig { opacity: .55; }
+.zeile.spaet .datum { color: #A3271F; font-weight: 700; }
+.zeile .knoepfe, .knoepfe { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.formular .knoepfe { justify-content: flex-start; }
+.status { font-size: 13px; border-radius: 99px; padding: 2px 10px; justify-self: start; border: 1px solid var(--linie); }
+.s-vorbereitet { background: var(--graphit); color: var(--weiss); }
+.s-erledigt, .s-negativ { color: var(--neben); }
+.dialog { border: 1px solid var(--linie); border-radius: 4px; padding: 24px; width: min(640px, calc(100vw - 32px)); }
+.dialog::backdrop { background: rgba(46, 51, 56, .5); }
+.meldung { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--graphit); color: var(--weiss); padding: 10px 18px; border-radius: 4px; z-index: 50; max-width: calc(100vw - 32px); }
+.meldung.fehler { background: #A3271F; }
+.org .leute { list-style: none; padding: 0; margin: 0 0 12px; }
+.org .leute li { margin-bottom: 4px; }
+.punkt { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--linie); margin-right: 8px; }
+.punkt.an { background: #2E7D32; }
+@media (max-width: 860px) {
+  .zeile { grid-template-columns: 1fr; gap: 6px; }
+  .zeile .knoepfe { justify-content: flex-start; }
+  .zeile.kopf { display: none; }
+}
+.btn.klein { color: var(--weiss); }
+.btn.light, .btn.light.klein { color: var(--graphit); }
