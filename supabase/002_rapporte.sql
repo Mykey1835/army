@@ -82,9 +82,13 @@ begin
       end if;
     end if;
   end if;
+  if tg_op = 'INSERT' and new.rapport_id is not null and not exists (
+       select 1 from public.rapporte where id = new.rapport_id and dienst_id = new.dienst_id and not abgeschlossen) then
+    raise exception 'Rapport abgeschlossen oder falscher Dienst.';
+  end if;
   if tg_op = 'INSERT' and not kdt then
     if protokoll and new.rapport_id is not null then
-      null; -- Abmachung aus dem Protokoll: Sperre wie vom Kdt
+      new.gesperrt := new.datum is not null or new.anker is not null; -- Abmachung: Sperre nur mit Termin
     else
       new.gesperrt := false;
       new.rapport_id := null;
@@ -119,10 +123,13 @@ create policy kdt_loeschen on public.rapporte for delete to authenticated using 
 create policy lesen on public.rapport_beitraege for select to authenticated
   using (exists (select 1 from public.rapporte r where r.id = rapport_id));
 create policy schreiben on public.rapport_beitraege for insert to authenticated
-  with check (public.ist_protokoll() or funktion = public.meine_funktion());
+  with check ((public.ist_protokoll() or funktion = public.meine_funktion())
+              and exists (select 1 from public.rapporte r where r.id = rapport_id));
 create policy aendern on public.rapport_beitraege for update to authenticated
-  using (public.ist_protokoll() or funktion = public.meine_funktion())
-  with check (public.ist_protokoll() or funktion = public.meine_funktion());
+  using ((public.ist_protokoll() or funktion = public.meine_funktion())
+         and exists (select 1 from public.rapporte r where r.id = rapport_id))
+  with check ((public.ist_protokoll() or funktion = public.meine_funktion())
+              and exists (select 1 from public.rapporte r where r.id = rapport_id));
 
 -- Abmachungen eines sichtbaren Rapports sieht das ganze Kader; Protokoll erfasst sie für alle Funktionen
 create policy rapport_lesen on public.todos for select to authenticated

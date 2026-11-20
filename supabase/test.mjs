@@ -122,6 +122,14 @@ await t('Four erfasst keine Abmachung', ()=>as(F, ()=>q(`insert into todos(diens
 await t('Kdt-Ordonnanz schliesst Rapport ab', ()=>as(KO, ()=>q(`update rapporte set abgeschlossen=true where id=$1`,[R1])));
 await t('nach Abschluss kein Beitrag mehr', ()=>as(F, ()=>q(`update rapport_beitraege set text='zu spät' where rapport_id=$1 and funktion='Four'`,[R1])), true);
 await t('Four schliesst keinen Rapport', async()=>{ const r=await as(F, ()=>q(`update rapporte set abgeschlossen=false where id=$1 returning id`,[R1])); if(r.rows.length) throw new Error('geändert'); });
+// Nachkontrolle Prüfer (ohne RETURNING, wie supabase-js)
+const R9 = (await as(K, ()=>q(`insert into rapporte(dienst_id,art,datum) values ($1,'DR',$2) returning id`,[D4,d(380)]))).rows[0].id;
+await t('A: Beitrag in unsichtbaren Rapport gesperrt', ()=>as(F, ()=>q(`insert into rapport_beitraege(rapport_id,funktion,text) values ($1,'Four','x')`,[R9])), true);
+await t('B: Abmachung in abgeschlossenen Rapport gesperrt', ()=>as(KO, ()=>q(`insert into todos(dienst_id,was,funktion,rapport_id) values ($1,'x','Zfhr',$2)`,[D2,R1])), true);
+await t('B: Abmachung mit Rapport aus anderem Dienst gesperrt', ()=>as(K, ()=>q(`insert into todos(dienst_id,was,funktion,rapport_id) values ($1,'x','Zfhr',$2)`,[D2,R9])), true);
+const R2 = (await as(KO, ()=>q(`insert into rapporte(dienst_id,art,datum) values ($1,'KR',$2) returning id`,[D2,d(7)]))).rows[0].id;
+await as(KO, ()=>q(`insert into todos(dienst_id,was,funktion,rapport_id,gesperrt) values ($1,'ohne Termin','Zfhr',$2,true)`,[D2,R2]));
+r = await q(`select gesperrt from todos where was='ohne Termin'`); console.log('C: Abmachung ohne Termin gesperrt:', r.rows[0].gesperrt, '(erwartet false)');
 await t('Wappen-Name geprüft', ()=>as(K, ()=>q(`update dienste set wappen='../x.png' where id=$1`,[D2])), true);
 await t('Wappen setzen', ()=>as(K, ()=>q(`update dienste set wappen='ristl-62.png' where id=$1`,[D2])));
 console.log('OK', ok, 'FEHLER', fail);
